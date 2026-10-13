@@ -32,17 +32,26 @@
    - Reordonare pagini (stânga / dreapta).
    - Căutare rapidă după titlu.
 
-5. **Extragere Text OCR (Offline & Gratuit):**
+5. **Semnături & Ștampile Digitale:**
+   - **Desenează direct pe ecran:** Pad tactil cu cerneală albastră realistă, neagră sau roșie, grosime reglabilă a liniei.
+   - **Scanează cu camera:** Fotografiază o semnătură sau ștampilă de pe o foaie fizică – fundalul alb este eliminat automat (transparență completă).
+   - **Importă din galerie:** Încarcă fișiere PNG/JPG cu fundal transparent sau decupat automat.
+   - **Șabloane de ștampile oficiale:** Creează instant ștampile dreptunghiulare (*CONFORM CU ORIGINALUL* + dată), rotunde (*Sigiliu Firmă / VIZAT*) sau insigne (*ACHITAT / APROBAT*).
+   - **Colecție salvată:** Salvează mai multe semnături și ștampile pentru a le reutiliza oricând fără să le redesenezi.
+   - **Plasare tactilă precisă:** Trage cu degetul, redimensionează și rotește ștampila pe foaie.
+   - **Opțiunea „Pune pe întreg documentul”:** Aplică semnătura sau ștampila pe toate paginile contractului/documentului simultan, în exact același loc!
+
+6. **Extragere Text OCR (Offline & Gratuit):**
    - Recunoaștere optică a caracterelor (OCR) direct în browser folosind `tesseract.js`.
    - Suport nativ pentru limba Română și Engleză.
    - Copiere text în clipboard sau descărcare fișier `.txt`.
 
-6. **Export & Partajare PDF:**
+7. **Export & Partajare PDF:**
    - Formate: **A4 Standard**, **Original**, **Letter US**.
    - Niveluri de compresie: **Pro HD (300 DPI)**, **Optimizat (WhatsApp & Email)**, **Compact**.
    - Integrare nativă cu meniul telefonului: Trimite PDF-ul direct pe WhatsApp, Gmail, Telegram sau Google Drive cu un singur tap.
 
-7. **Confidențialitate Totală & Zero Costuri:**
+8. **Confidențialitate Totală & Zero Costuri:**
    - Baza de date locală **IndexedDB** (`Dexie`).
    - Niciun document nu este trimis pe vreun server extern. Datele tale confidențiale rămân doar pe telefonul tău.
 

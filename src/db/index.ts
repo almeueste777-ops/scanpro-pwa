@@ -42,15 +42,30 @@ export interface DocumentItem {
   thumbnail: string;
 }
 
+export interface SignatureItem {
+  id: string;
+  type: 'signature' | 'stamp';
+  name: string;
+  imageData: string; // Transparent PNG data URL
+  color?: string; // Hex color (e.g., '#002fbe', '#000000', '#dc2626')
+  createdAt: number;
+}
+
 export class ScanProDatabase extends Dexie {
   documents!: Table<DocumentItem, string>;
   pages!: Table<DocumentPage, string>;
+  signatures!: Table<SignatureItem, string>;
 
   constructor() {
     super('ScanProDB');
     this.version(1).stores({
       documents: 'id, title, category, createdAt, updatedAt',
       pages: 'id, documentId, pageNumber, createdAt'
+    });
+    this.version(2).stores({
+      documents: 'id, title, category, createdAt, updatedAt',
+      pages: 'id, documentId, pageNumber, createdAt',
+      signatures: 'id, type, createdAt'
     });
   }
 }
@@ -140,4 +155,28 @@ export async function deletePage(pageId: string): Promise<void> {
 export async function deleteDocument(documentId: string): Promise<void> {
   await db.pages.where('documentId').equals(documentId).delete();
   await db.documents.delete(documentId);
+}
+
+// Signature and Stamp helpers
+export async function saveSignatureItem(
+  item: Omit<SignatureItem, 'id' | 'createdAt'>
+): Promise<SignatureItem> {
+  const newSignature: SignatureItem = {
+    ...item,
+    id: crypto.randomUUID(),
+    createdAt: Date.now()
+  };
+  await db.signatures.add(newSignature);
+  return newSignature;
+}
+
+export async function getSignatures(type?: 'signature' | 'stamp'): Promise<SignatureItem[]> {
+  if (type) {
+    return db.signatures.where('type').equals(type).reverse().sortBy('createdAt');
+  }
+  return db.signatures.orderBy('createdAt').reverse().toArray();
+}
+
+export async function deleteSignatureItem(id: string): Promise<void> {
+  await db.signatures.delete(id);
 }

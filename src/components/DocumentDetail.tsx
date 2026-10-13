@@ -11,7 +11,8 @@ import {
   Check,
   ChevronLeft as ArrowLeft,
   ChevronRight as ArrowRight,
-  Maximize2
+  Maximize2,
+  PenTool
 } from 'lucide-react';
 import {
   db,
@@ -23,6 +24,7 @@ import {
 import { rotateCanvas, createThumbnail } from '../utils/imageProcessing';
 import { PdfExportModal } from './PdfExportModal';
 import { OcrModal } from './OcrModal';
+import { SignDocumentView } from './SignDocumentView';
 
 interface DocumentDetailProps {
   documentId: string;
@@ -46,6 +48,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const [showExportModal, setShowExportModal] = useState(false);
   const [ocrTargetPage, setOcrTargetPage] = useState<DocumentPage | null>(null);
   const [fullPreviewPage, setFullPreviewPage] = useState<DocumentPage | null>(null);
+  const [signViewPageIndex, setSignViewPageIndex] = useState<number | null>(null);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -196,6 +199,16 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Sign & Stamp Document */}
+            <button
+              onClick={() => setSignViewPageIndex(0)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-700 rounded-xl font-bold text-xs active:scale-95 transition"
+              title="Semnează și ștampilează documentul"
+            >
+              <PenTool className="w-3.5 h-3.5 text-blue-400" />
+              <span>Semnează</span>
+            </button>
+
             {/* Export PDF Button */}
             <button
               onClick={() => setShowExportModal(true)}
@@ -315,6 +328,15 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                   </button>
+
+                  {/* Sign & Stamp Page */}
+                  <button
+                    onClick={() => setSignViewPageIndex(idx)}
+                    className="p-1 rounded-lg text-blue-400 hover:text-blue-300 hover:bg-slate-800"
+                    title="Semnează / Ștampilează"
+                  >
+                    <PenTool className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
                 {/* Delete Page */}
@@ -364,21 +386,29 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
       </div>
 
       {/* Floating Bottom Action Bar */}
-      <div className="fixed bottom-0 inset-x-0 bg-slate-900/95 border-t border-slate-800 px-6 py-4 backdrop-blur-md flex items-center justify-between gap-3 z-30">
+      <div className="fixed bottom-0 inset-x-0 bg-slate-900/95 border-t border-slate-800 px-4 py-3 backdrop-blur-md flex items-center justify-between gap-2 z-30">
         <button
           onClick={() => onAddPageCamera(documentId)}
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold text-xs active:scale-95 transition"
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold text-xs active:scale-95 transition"
         >
           <Camera className="w-4 h-4 text-emerald-400" />
-          <span>Fă altă Poză</span>
+          <span>+ Poză</span>
+        </button>
+
+        <button
+          onClick={() => setSignViewPageIndex(0)}
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-blue-300 font-semibold text-xs active:scale-95 transition"
+        >
+          <PenTool className="w-4 h-4 text-blue-400" />
+          <span>Semnătură / Ștampilă</span>
         </button>
 
         <button
           onClick={() => setShowExportModal(true)}
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition"
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition"
         >
           <Share2 className="w-4 h-4 stroke-[2.5]" />
-          <span>Partajează PDF</span>
+          <span>Export PDF</span>
         </button>
       </div>
 
@@ -432,6 +462,19 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             loadData();
           }}
           onClose={() => setOcrTargetPage(null)}
+        />
+      )}
+
+      {signViewPageIndex !== null && (
+        <SignDocumentView
+          document={doc}
+          pages={pages}
+          initialPageIndex={signViewPageIndex}
+          onClose={() => setSignViewPageIndex(null)}
+          onSaved={() => {
+            setSignViewPageIndex(null);
+            loadData();
+          }}
         />
       )}
     </div>
