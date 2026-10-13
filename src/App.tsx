@@ -12,11 +12,12 @@ import { CameraView } from './components/CameraView';
 import { CropView } from './components/CropView';
 import { FilterView } from './components/FilterView';
 import { DocumentDetail } from './components/DocumentDetail';
+import { SignatureStudioView } from './components/SignatureStudioView';
 
 export const App: React.FC = () => {
   // Navigation / views
   const [activeView, setActiveView] = useState<
-    'home' | 'camera' | 'crop' | 'filter' | 'detail'
+    'home' | 'camera' | 'crop' | 'filter' | 'detail' | 'studio'
   >('home');
 
   // Documents list
@@ -191,6 +192,7 @@ export const App: React.FC = () => {
           }}
           onNewScanCamera={handleStartNewScanCamera}
           onNewScanGallery={(files) => handleStartGalleryImport(files)}
+          onOpenSignatureStudio={() => setActiveView('studio')}
           onRefresh={refreshDocuments}
         />
       )}
@@ -243,6 +245,18 @@ export const App: React.FC = () => {
           onEditPageCrop={(page) => {
             setCurrentRawImage(page.originalImage);
             setActiveView('crop');
+          }}
+        />
+      )}
+
+      {/* 6. Signature & Stamp Studio View */}
+      {activeView === 'studio' && (
+        <SignatureStudioView
+          documents={documents}
+          onBack={() => setActiveView('home')}
+          onOpenDocumentToSign={(docId) => {
+            setTargetDocId(docId);
+            setActiveView('detail');
           }}
         />
       )}
