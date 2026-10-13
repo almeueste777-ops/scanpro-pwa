@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "deploy": "tsc -b && vite build && gh-pages -d dist --dotfiles"
+    "deploy": "tsc -b && vite build && powershell -ExecutionPolicy Bypass -File quick_deploy.ps1"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
