@@ -1,0 +1,276 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Check,
+  ChevronLeft,
+  RotateCw,
+  Sliders,
+  Sparkles,
+  FileText,
+  Sun,
+  Eye,
+  Plus
+} from 'lucide-react';
+import type { FilterType } from '../db';
+import { applyFilter, rotateCanvas, createThumbnail } from '../utils/imageProcessing';
+
+interface FilterViewProps {
+  warpedCanvas: HTMLCanvasElement;
+  onSavePage: (
+    processedImage: string,
+    thumbnail: string,
+    filter: FilterType,
+    brightness: number,
+    contrast: number,
+    rotation: number,
+    continueAdding?: boolean
+  ) => void;
+  onBackToCrop: () => void;
+}
+
+interface FilterOption {
+  type: FilterType;
+  label: string;
+  icon: React.ReactNode;
+  description: string;
+}
+
+const FILTER_OPTIONS: FilterOption[] = [
+  {
+    type: 'magic',
+    label: 'Magic Color',
+    icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
+    description: 'Fundal alb curat, text intens și culori vii'
+  },
+  {
+    type: 'bw',
+    label: 'Alb & Negru',
+    icon: <FileText className="w-4 h-4 text-blue-400" />,
+    description: 'Document ultra-clar, elimină umbrele'
+  },
+  {
+    type: 'grayscale',
+    label: 'Tonuri Gri',
+    icon: <span className="text-sm font-bold text-slate-400">G</span>,
+    description: 'Nuanțe uniforme de gri'
+  },
+  {
+    type: 'sharp',
+    label: 'Claritate',
+    icon: <Sun className="w-4 h-4 text-amber-400" />,
+    description: 'Accentuează scrisul de mână și creionul'
+  },
+  {
+    type: 'original',
+    label: 'Original',
+    icon: <Eye className="w-4 h-4 text-slate-400" />,
+    description: 'Fără ajustări de culoare'
+  }
+];
+
+export const FilterView: React.FC<FilterViewProps> = ({
+  warpedCanvas,
+  onSavePage,
+  onBackToCrop
+}) => {
+  const [currentFilter, setCurrentFilter] = useState<FilterType>('magic');
+  const [brightness, setBrightness] = useState<number>(0);
+  const [contrast, setContrast] = useState<number>(0);
+  const [rotation, setRotation] = useState<number>(0);
+  const [showSliders, setShowSliders] = useState<boolean>(false);
+
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const processedCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Render processed image with filter, rotation, brightness & contrast
+  const updatePreview = useCallback(() => {
+    if (!previewCanvasRef.current) return;
+
+    // 1. Apply rotation first
+    const rotated = rotateCanvas(warpedCanvas, rotation);
+
+    // 2. Apply chosen CamScanner filter & sliders
+    const filtered = applyFilter(rotated, currentFilter, brightness, contrast);
+    processedCanvasRef.current = filtered;
+
+    const displayCanvas = previewCanvasRef.current;
+    const ctx = displayCanvas.getContext('2d');
+    if (!ctx) return;
+
+    displayCanvas.width = filtered.width;
+    displayCanvas.height = filtered.height;
+    ctx.drawImage(filtered, 0, 0);
+  }, [warpedCanvas, currentFilter, brightness, contrast, rotation]);
+
+  useEffect(() => {
+    updatePreview();
+  }, [updatePreview]);
+
+  // Handle Save
+  const handleSave = (continueAdding = false) => {
+    if (!processedCanvasRef.current) return;
+    const canvas = processedCanvasRef.current;
+    const processedImage = canvas.toDataURL('image/jpeg', 0.94);
+    const thumbnail = createThumbnail(canvas, 320);
+
+    onSavePage(
+      processedImage,
+      thumbnail,
+      currentFilter,
+      brightness,
+      contrast,
+      rotation,
+      continueAdding
+    );
+  };
+
+  const handleRotate = () => {
+    setRotation((prev) => (prev + 90) % 360);
+    if (navigator.vibrate) navigator.vibrate(25);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col justify-between overflow-hidden select-none">
+      {/* Top Header */}
+      <div className="flex items-center justify-between px-5 pt-8 pb-3 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md z-20">
+        <button
+          onClick={onBackToCrop}
+          className="flex items-center gap-1 p-2 -ml-2 rounded-full text-slate-300 hover:text-white hover:bg-slate-800 transition"
+        >
+          <ChevronLeft className="w-6 h-6" />
+          <span className="text-sm font-medium">Înapoi</span>
+        </button>
+
+        <h2 className="text-base font-semibold text-white tracking-wide">Filtru Document</h2>
+
+        <div className="flex items-center gap-2">
+          {/* Rotate Button */}
+          <button
+            onClick={handleRotate}
+            className="p-2 rounded-full text-slate-300 hover:text-white hover:bg-slate-800 transition"
+            title="Rotește"
+          >
+            <RotateCw className="w-5 h-5" />
+          </button>
+
+          {/* Toggle Sliders */}
+          <button
+            onClick={() => setShowSliders(!showSliders)}
+            className={`p-2 rounded-full transition ${
+              showSliders ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-300 hover:bg-slate-800'
+            }`}
+            title="Ajustări luminozitate & contrast"
+          >
+            <Sliders className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Preview */}
+      <div className="relative flex-1 w-full h-full flex items-center justify-center p-4 overflow-hidden bg-slate-950/60">
+        <div className="relative max-w-full max-h-full shadow-2xl rounded-lg overflow-hidden border border-slate-800">
+          <canvas
+            ref={previewCanvasRef}
+            className="max-w-full max-h-[62vh] object-contain block mx-auto rounded-lg"
+          />
+        </div>
+
+        {/* Floating Fine-Tuning Sliders Overlay */}
+        {showSliders && (
+          <div className="absolute bottom-4 left-4 right-4 bg-slate-900/95 border border-slate-700/80 rounded-2xl p-4 backdrop-blur-xl shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                Ajustări Fine
+              </span>
+              <button
+                onClick={() => {
+                  setBrightness(0);
+                  setContrast(0);
+                }}
+                className="text-xs text-emerald-400 hover:text-emerald-300"
+              >
+                Resetează
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs text-slate-400 mb-1">
+                  <span>Luminozitate</span>
+                  <span>{brightness > 0 ? `+${brightness}` : brightness}</span>
+                </div>
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={brightness}
+                  onChange={(e) => setBrightness(Number(e.target.value))}
+                  className="w-full accent-emerald-500 bg-slate-800 h-2 rounded-lg cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs text-slate-400 mb-1">
+                  <span>Contrast</span>
+                  <span>{contrast > 0 ? `+${contrast}` : contrast}</span>
+                </div>
+                <input
+                  type="range"
+                  min="-50"
+                  max="50"
+                  value={contrast}
+                  onChange={(e) => setContrast(Number(e.target.value))}
+                  className="w-full accent-emerald-500 bg-slate-800 h-2 rounded-lg cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Filter Selector Ribbon */}
+      <div className="bg-slate-900/95 border-t border-slate-800/80 backdrop-blur-md z-20">
+        <div className="flex items-center gap-2 overflow-x-auto px-4 py-3 no-scrollbar">
+          {FILTER_OPTIONS.map((f) => {
+            const isSelected = currentFilter === f.type;
+            return (
+              <button
+                key={f.type}
+                onClick={() => {
+                  setCurrentFilter(f.type);
+                  if (navigator.vibrate) navigator.vibrate(20);
+                }}
+                className={`flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+                  isSelected
+                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-105'
+                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                {f.icon}
+                <span>{f.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Bottom Save & Continue Action Bar */}
+        <div className="flex items-center justify-between px-5 pb-6 pt-2 gap-3">
+          <button
+            onClick={() => handleSave(true)}
+            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm transition active:scale-95 border border-slate-700"
+          >
+            <Plus className="w-4 h-4 text-emerald-400" />
+            <span>Scanează Următoarea</span>
+          </button>
+
+          <button
+            onClick={() => handleSave(false)}
+            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm shadow-xl shadow-emerald-500/25 transition active:scale-95"
+          >
+            <Check className="w-5 h-5 stroke-[2.5]" />
+            <span>Finalizează Pagina</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
