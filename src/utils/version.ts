@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v3.3.0';
-export const APP_BUILD_NAME = 'Ultra-HD Scan Engine v3.3: Zoom & Pan Interactiv, Claritate Text Maximizată, Cameră 4K';
+export const APP_VERSION = 'v3.4.0';
+export const APP_BUILD_NAME = 'CamScanner Pro Any-Angle Flatbed Engine v3.4: Scanare Inteligentă din Orice Unghi, Redresare Proporții A4, Fundal Alb Impecabil';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload

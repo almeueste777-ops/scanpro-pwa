@@ -195,24 +195,114 @@ function quadArea(c: DocumentCorners): number {
 }
 
 /**
- * Fits the best 4 corners to a convex hull of document boundary points
+ * Perpendicular distance from point p to line segment (p1, p2)
+ */
+function perpendicularDistance(p: Point, p1: Point, p2: Point): number {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const mag = Math.hypot(dx, dy);
+  if (mag < 1e-6) return Math.hypot(p.x - p1.x, p.y - p1.y);
+  return Math.abs(dy * p.x - dx * p.y + p2.x * p1.y - p2.y * p1.x) / mag;
+}
+
+/**
+ * Ramer-Douglas-Peucker polygonal simplification
+ */
+function rdpSimplify(points: Point[], epsilon: number): Point[] {
+  if (points.length <= 2) return points.slice();
+  let dmax = 0;
+  let index = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const d = perpendicularDistance(points[i], points[0], points[points.length - 1]);
+    if (d > dmax) {
+      index = i;
+      dmax = d;
+    }
+  }
+  if (dmax > epsilon) {
+    const rec1 = rdpSimplify(points.slice(0, index + 1), epsilon);
+    const rec2 = rdpSimplify(points.slice(index), epsilon);
+    return rec1.slice(0, rec1.length - 1).concat(rec2);
+  }
+  return [points[0], points[points.length - 1]];
+}
+
+/**
+ * Fits the best 4 corners to a document boundary under ANY camera angle or orientation.
+ * Combines:
+ * 1. Adaptive Ramer-Douglas-Peucker polygon reduction on the convex hull.
+ * 2. 24-Angle Full Rotation Extremal Coordinate Scanning (0° to 180° in 7.5° steps).
+ * 3. Sobel Edge Gradient Support Scoring along quadrilateral perimeters.
  */
 function findQuadFromHull(hull: Point[], sw: number, sh: number, gradMag: Float32Array): DocumentCorners {
   if (hull.length < 4) {
-    return estimateDefaultCorners(sw, sh);
+    return estimateDefaultCorners(sw, sw * 1.414 < sh ? Math.round(sw * 1.414) : sh);
   }
 
-  // Method 1: Extremal corner scoring in rotated coordinate frames
-  // We test multiple angle orientations to handle tilted/rotated sheets on desk
   let bestCorners: Point[] = [];
   let bestScore = -Infinity;
 
+  const scoreCandidate = (pts: Point[]) => {
+    if (pts.length !== 4) return;
+    const quad = orderCorners(pts);
+    const area = quadArea(quad);
+    if (area < sw * sh * 0.10) return;
+
+    // Edge gradient support
+    const edges: [Point, Point][] = [
+      [quad.tl, quad.tr],
+      [quad.tr, quad.br],
+      [quad.br, quad.bl],
+      [quad.bl, quad.tl]
+    ];
+
+    let edgeEnergy = 0;
+    for (const [a, b] of edges) {
+      const steps = 22;
+      for (let s = 1; s < steps; s++) {
+        const t = s / steps;
+        const px = Math.round(a.x + (b.x - a.x) * t);
+        const py = Math.round(a.y + (b.y - a.y) * t);
+        if (px >= 1 && px < sw - 1 && py >= 1 && py < sh - 1) {
+          let localMax = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const g = gradMag[(py + dy) * sw + (px + dx)];
+              if (g > localMax) localMax = g;
+            }
+          }
+          edgeEnergy += localMax;
+        }
+      }
+    }
+
+    const totalScore = area + edgeEnergy * 14;
+    if (totalScore > bestScore) {
+      bestScore = totalScore;
+      bestCorners = [quad.tl, quad.tr, quad.br, quad.bl];
+    }
+  };
+
+  // Method 1: Adaptive Ramer-Douglas-Peucker polygon reduction to find true 4-corner shape
+  // Closed loop
+  const closedHull = hull.concat([hull[0]]);
+  for (let eps = 1.0; eps <= Math.max(sw, sh) * 0.15; eps += 0.8) {
+    const simplified = rdpSimplify(closedHull, eps);
+    // Remove duplicate closing point if present
+    const unique = simplified.slice(0, -1);
+    if (unique.length === 4) {
+      scoreCandidate(unique);
+    }
+  }
+
+  // Method 2: 24-step full rotation extremal scanning (covers 0° to 180° at 7.5° intervals)
+  // This detects documents placed diagonally, sideways, upside-down, or skewed on the desk!
   const cx = hull.reduce((s, p) => s + p.x, 0) / hull.length;
   const cy = hull.reduce((s, p) => s + p.y, 0) / hull.length;
 
-  const angles = [-0.45, -0.3, -0.15, -0.05, 0, 0.05, 0.15, 0.3, 0.45];
-
-  for (const theta of angles) {
+  const numAngles = 24;
+  for (let i = 0; i < numAngles; i++) {
+    const theta = (i * Math.PI) / numAngles;
     const cosT = Math.cos(theta);
     const sinT = Math.sin(theta);
 
@@ -250,46 +340,14 @@ function findQuadFromHull(hull: Point[], sw: number, sh: number, gradMag: Float3
       }
     }
 
-    const candidate = orderCorners([pTL, pTR, pBR, pBL]);
-    const area = quadArea(candidate);
-
-    // Score edge support along the 4 segments in gradMag
-    const edges: [Point, Point][] = [
-      [candidate.tl, candidate.tr],
-      [candidate.tr, candidate.br],
-      [candidate.br, candidate.bl],
-      [candidate.bl, candidate.tl]
-    ];
-
-    let edgeEnergy = 0;
-    for (const [a, b] of edges) {
-      const steps = 24;
-      for (let s = 1; s < steps; s++) {
-        const t = s / steps;
-        const px = Math.round(a.x + (b.x - a.x) * t);
-        const py = Math.round(a.y + (b.y - a.y) * t);
-        if (px >= 1 && px < sw - 1 && py >= 1 && py < sh - 1) {
-          // Max gradient in 3x3 neighborhood of the line
-          let localMax = 0;
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const g = gradMag[(py + dy) * sw + (px + dx)];
-              if (g > localMax) localMax = g;
-            }
-          }
-          edgeEnergy += localMax;
-        }
-      }
-    }
-
-    const totalScore = area + edgeEnergy * 12;
-    if (totalScore > bestScore) {
-      bestScore = totalScore;
-      bestCorners = [candidate.tl, candidate.tr, candidate.br, candidate.bl];
-    }
+    scoreCandidate([pTL, pTR, pBR, pBL]);
   }
 
-  return orderCorners(bestCorners);
+  if (bestCorners.length === 4) {
+    return orderCorners(bestCorners);
+  }
+
+  return estimateDefaultCorners(sw, sh);
 }
 
 /**
@@ -621,7 +679,7 @@ export function detectDocumentCornersSync(
   // Otherwise (e.g. white paper on a white table), use radial Sobel edge ray-casting from center!
   let candidatePoints = boundaryPoints;
 
-  if (areaRatio < 0.08 || areaRatio > 0.91 || boundaryPoints.length < 20) {
+  if (areaRatio < 0.05 || areaRatio > 0.97 || boundaryPoints.length < 16) {
     const rayPoints: Point[] = [];
     const numRays = 72;
     const minRadius = Math.min(sw, sh) * 0.15;
@@ -681,7 +739,8 @@ export function detectDocumentCornersSync(
     return (Math.acos(cosA) * 180) / Math.PI;
   };
 
-  // Validate quadrilateral geometry rigorously so we NEVER crop a small inner text block!
+  // Validate quadrilateral geometry with Any-Angle camera support
+  // Accepts tilted perspective trapezoids (acute top angles down to 22°, obtuse bottom up to 158°)
   const qArea = quadArea(smallQuad) / numPixels;
   const topW = distance(smallQuad.tl, smallQuad.tr);
   const botW = distance(smallQuad.bl, smallQuad.br);
@@ -700,15 +759,15 @@ export function detectDocumentCornersSync(
   const maxAngle = Math.max(angTL, angTR, angBR, angBL);
 
   const isValidQuad =
-    qArea >= 0.22 &&
-    qArea <= 0.94 &&
-    minSide >= Math.min(sw, sh) * 0.28 &&
-    widthRatio >= 0.48 &&
-    widthRatio <= 2.1 &&
-    heightRatio >= 0.48 &&
-    heightRatio <= 2.1 &&
-    minAngle >= 58 &&
-    maxAngle <= 125;
+    qArea >= 0.06 &&
+    qArea <= 0.98 &&
+    minSide >= Math.min(sw, sh) * 0.10 &&
+    widthRatio >= 0.28 &&
+    widthRatio <= 3.5 &&
+    heightRatio >= 0.28 &&
+    heightRatio <= 3.5 &&
+    minAngle >= 22 &&
+    maxAngle <= 158;
 
   if (!isValidQuad) {
     return {
@@ -789,14 +848,68 @@ export function warpPerspective(
     return directCanvas;
   }
 
-  // Calculate target rectified dimensions
+  // Calculate target rectified dimensions with Projective Convergence Compensation
+  // (Prevents squashed/flattened pages when photographing from any vertical or side slant angle!)
   const topWidth = distance(tl, tr);
   const bottomWidth = distance(bl, br);
-  let targetWidth = Math.max(120, Math.round(Math.max(topWidth, bottomWidth)));
-
   const leftHeight = distance(tl, bl);
   const rightHeight = distance(tr, br);
-  let targetHeight = Math.max(120, Math.round(Math.max(leftHeight, rightHeight)));
+
+  // Measure perspective convergence along both axes
+  const maxW = Math.max(topWidth, bottomWidth);
+  const minW = Math.max(1, Math.min(topWidth, bottomWidth));
+  const wTilt = maxW / minW; // vertical camera tilt makes horizontal edges converge
+
+  const maxH = Math.max(leftHeight, rightHeight);
+  const minH = Math.max(1, Math.min(leftHeight, rightHeight));
+  const hTilt = maxH / minH; // horizontal camera tilt makes vertical edges converge
+
+  const avgWidth = (topWidth + bottomWidth) / 2;
+  const avgHeight = (leftHeight + rightHeight) / 2;
+
+  // Unskew foreshortened axes
+  let unskewedW = maxW;
+  let unskewedH = maxH;
+
+  if (wTilt > 1.05) {
+    unskewedH = avgHeight * Math.sqrt(wTilt) * 1.06;
+  }
+  if (hTilt > 1.05) {
+    unskewedW = avgWidth * Math.sqrt(hTilt) * 1.06;
+  }
+
+  // Determine physical orientation and aspect ratio
+  const isPortrait = unskewedH >= unskewedW;
+  const majorDim = Math.max(unskewedW, unskewedH);
+  const minorDim = Math.max(1, Math.min(unskewedW, unskewedH));
+  const rawRatio = majorDim / minorDim;
+
+  // Standard Document Snapping for authentic Flatbed Scan Proportions
+  let targetRatio = rawRatio;
+  if (rawRatio >= 1.22 && rawRatio <= 1.56) {
+    // Standard ISO A4/A5 (1 : 1.4142)
+    targetRatio = 1.4142;
+  } else if (rawRatio >= 1.14 && rawRatio < 1.22) {
+    // US Letter format (1 : 1.2941)
+    targetRatio = 1.2941;
+  } else if (rawRatio > 1.56 && rawRatio <= 1.68) {
+    // ID Card / Driver License / US Legal
+    targetRatio = 1.5858;
+  } else if (rawRatio >= 0.92 && rawRatio <= 1.08) {
+    // Square notes
+    targetRatio = 1.0;
+  }
+
+  let targetWidth: number;
+  let targetHeight: number;
+
+  if (isPortrait) {
+    targetWidth = Math.max(160, Math.round(unskewedW));
+    targetHeight = Math.max(160, Math.round(targetWidth * targetRatio));
+  } else {
+    targetHeight = Math.max(160, Math.round(unskewedH));
+    targetWidth = Math.max(160, Math.round(targetHeight * targetRatio));
+  }
 
   // Cap max resolution to 2800px (~300 DPI A4) so text stays ultra-crisp when zooming in
   if (Math.max(targetWidth, targetHeight) > maxAllowedDim) {
@@ -1296,18 +1409,18 @@ export function applyFilter(
         data[pIdx + 1] = ng < 0 ? 0 : ng > 255 ? 255 : ng;
         data[pIdx + 2] = nb < 0 ? 0 : nb > 255 ? 255 : nb;
       } else {
-        // 'magic': CamScanner Pro "Magic HD"
-        // Uses a gamma-reinforced curve (pow 1.38) that darkens mid-tone gray text strokes
-        // while cleanly bleaching only true paper background (>= 224) to #FFFFFF!
-        const whitePoint = 224 - brightness * 0.4;
-        const blackPoint = 42 + contrast * 0.35;
+        // 'magic': CamScanner Pro "Magic HD" Flatbed Scan Engine
+        // Uses a gamma-reinforced curve (pow 1.42) that darkens mid-tone gray text strokes
+        // to deep laser black while bleaching paper background (>= 218) to spotless #FFFFFF!
+        const whitePoint = 218 - brightness * 0.4;
+        const blackPoint = 48 + contrast * 0.35;
 
         const mapCurve = (c: number) => {
           if (c >= whitePoint) return 255;
-          if (c <= blackPoint) return Math.max(0, c * 0.22);
+          if (c <= blackPoint) return Math.max(0, c * 0.15); // Rich deep laser black
           const t = (c - blackPoint) / (whitePoint - blackPoint);
           // Power > 1 pulls gray text strokes down toward dark black without eroding thin letters!
-          return Math.pow(t, 1.38) * 255;
+          return Math.pow(t, 1.42) * 255;
         };
 
         nr = mapCurve(nr);
@@ -1318,9 +1431,9 @@ export function applyFilter(
         const maxC = Math.max(nr, ng, nb);
         const minC = Math.min(nr, ng, nb);
         const chroma = maxC - minC;
-        if (chroma > 16 && maxC < 248) {
+        if (chroma > 14 && maxC < 248) {
           const mid = (nr + ng + nb) / 3;
-          const satBoost = 1.38;
+          const satBoost = 1.45;
           nr = mid + (nr - mid) * satBoost;
           ng = mid + (ng - mid) * satBoost;
           nb = mid + (nb - mid) * satBoost;
