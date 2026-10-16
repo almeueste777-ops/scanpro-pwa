@@ -240,154 +240,178 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   if (!doc) return null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pb-24 select-none">
-      {/* Top Header */}
-      <div className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 pt-4 pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            onClick={onBack}
-            className="p-2 -ml-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
+    <div className="min-h-dvh bg-luxury-aurora text-slate-100 flex flex-col pb-32 select-none">
+      {/* Sticky Glass Header */}
+      <header className="sticky top-0 z-40 glass-header pt-safe">
+        <div className="max-w-5xl mx-auto w-full px-3.5 sm:px-6 pt-3 pb-3 space-y-2.5">
+          {/* Row 1: Back + Full Title + Primary Export PDF + Delete */}
+          <div className="flex items-center justify-between gap-2.5">
+            <button
+              onClick={onBack}
+              className="p-2 -ml-1.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/[0.06] transition flex-shrink-0"
+              aria-label="Înapoi"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
 
-          <div className="flex-1 min-w-0">
-            {isEditingTitle ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={titleInput}
-                  onChange={(e) => setTitleInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
-                  autoFocus
-                  className="bg-slate-800 text-white text-base font-semibold px-2.5 py-1 rounded-lg outline-none border border-emerald-500 w-full"
-                />
-                <button
-                  onClick={handleSaveTitle}
-                  className="p-1.5 rounded-lg bg-emerald-500 text-slate-950"
+            <div className="flex-1 min-w-0">
+              {isEditingTitle ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={titleInput}
+                    onChange={(e) => setTitleInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
+                    autoFocus
+                    className="bg-slate-900 text-white text-sm sm:text-base font-bold px-3 py-1.5 rounded-xl outline-none border border-emerald-500 w-full"
+                  />
+                  <button
+                    onClick={handleSaveTitle}
+                    className="p-2 rounded-xl bg-emerald-500 text-slate-950 flex-shrink-0"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => setIsEditingTitle(true)}
+                  className="flex items-center gap-1.5 cursor-pointer group min-w-0"
                 >
-                  <Check className="w-4 h-4 stroke-[3]" />
-                </button>
-              </div>
-            ) : (
-              <div
-                onClick={() => setIsEditingTitle(true)}
-                className="flex items-center gap-1.5 cursor-pointer group"
+                  <h1 className="text-sm sm:text-base font-extrabold text-white truncate">
+                    {doc.title}
+                  </h1>
+                  <Edit2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-400 flex-shrink-0" />
+                </div>
+              )}
+              <p className="text-[10px] sm:text-xs text-slate-400 truncate">
+                {pages.length} {pages.length === 1 ? 'pagină' : 'pagini'} • Actualizat{' '}
+                {new Date(doc.updatedAt).toLocaleDateString('ro-RO')}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Primary Export PDF Button */}
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 hover:brightness-105 text-slate-950 rounded-xl font-black text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition"
               >
-                <h1 className="text-base font-bold text-white truncate max-w-[200px] sm:max-w-md">
-                  {doc.title}
-                </h1>
-                <Edit2 className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-400 flex-shrink-0" />
-              </div>
-            )}
-            <p className="text-[11px] text-slate-400">
-              {pages.length} {pages.length === 1 ? 'pagină' : 'pagini'} • Actualizat{' '}
-              {new Date(doc.updatedAt).toLocaleDateString('ro-RO')}
-            </p>
+                <Share2 className="w-4 h-4 stroke-[2.5]" />
+                <span>PDF / Word</span>
+              </button>
+
+              {/* Delete Document */}
+              <button
+                onClick={handleDeleteDoc}
+                className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-white/[0.06] transition"
+                title="Șterge document"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Smart Data Extractor (IBAN, CUI, Total, CNP) */}
+          {/* Row 2: Smart AI & Studio Action Strip (4 Equal Buttons — Never Crowds Title!) */}
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2.5">
             <button
               onClick={() => setShowSmartDataModal(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-950/90 hover:bg-purple-900 text-purple-300 border border-purple-500/40 rounded-xl font-bold text-xs active:scale-95 transition"
+              className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-purple-950/75 hover:bg-purple-900/80 text-purple-200 border border-purple-500/35 font-bold text-[11px] sm:text-xs active:scale-95 transition"
               title="Extractor AI Date: IBAN, CUI, Total Factură, CNP, CSV/vCard"
             >
-              <Cpu className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Date & IBAN</span>
-              <span className="sm:hidden">IBAN/AI</span>
+              <Cpu className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+              <span className="truncate">Date & IBAN</span>
             </button>
 
-            {/* Collage A4 Button */}
             <button
               onClick={() => setShowCollageModal(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 rounded-xl font-bold text-xs active:scale-95 transition"
+              className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-amber-950/75 hover:bg-amber-900/80 text-amber-200 border border-amber-500/35 font-bold text-[11px] sm:text-xs active:scale-95 transition"
               title="Colaj A4 (pune 2, 4 sau 6 bonuri/pagini pe o singură foaie A4)"
             >
-              <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
-              <span>Colaj A4</span>
+              <LayoutGrid className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span className="truncate">Colaj A4</span>
             </button>
 
-            {/* Export PDF Button */}
             <button
-              onClick={() => setShowExportModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-xl font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition"
+              onClick={() => setSignViewPageIndex(0)}
+              className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-blue-950/75 hover:bg-blue-900/80 text-blue-200 border border-blue-500/35 font-bold text-[11px] sm:text-xs active:scale-95 transition"
+              title="Semnează și ștampilează documentul"
             >
-              <Share2 className="w-4 h-4 stroke-[2.5]" />
-              <span>PDF</span>
+              <PenTool className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+              <span className="truncate">Semnează</span>
             </button>
 
-            {/* Delete Document */}
             <button
-              onClick={handleDeleteDoc}
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
-              title="Șterge document"
+              onClick={() => {
+                if (pages[0]) setRetouchTargetPage(pages[0]);
+              }}
+              className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-emerald-950/75 hover:bg-emerald-900/80 text-emerald-200 border border-emerald-500/35 font-bold text-[11px] sm:text-xs active:scale-95 transition"
+              title="Radieră pete, Marker evidențiator & Cenzurare CNP"
             >
-              <Trash2 className="w-4 h-4" />
+              <Eraser className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span className="truncate">Radieră Pro</span>
             </button>
           </div>
-        </div>
 
-        {/* Category Chips + Batch Filter Bar */}
-        <div className="flex items-center justify-between gap-2 overflow-x-auto pt-3 pb-1 no-scrollbar">
-          <div className="flex items-center gap-1.5">
-            {[
-              { id: 'general', label: 'General' },
-              { id: 'facturi', label: 'Facturi' },
-              { id: 'contracte', label: 'Contracte' },
-              { id: 'acte', label: 'Acte ID' },
-              { id: 'notite', label: 'Notițe' }
-            ].map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => handleCategoryChange(cat.id as any)}
-                className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition whitespace-nowrap ${
-                  doc.category === cat.id
-                    ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
-                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border border-transparent'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Batch Filter Quick Buttons */}
-          {pages.length > 0 && (
-            <div className="flex items-center gap-1 pl-2 border-l border-slate-800">
-              <Wand2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-              <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">
-                Filtru toate:
-              </span>
-              {(
-                [
-                  { id: 'magic', label: 'Magic' },
-                  { id: 'bw', label: 'Alb-Negru' },
-                  { id: 'sharp', label: 'Clar' },
-                  { id: 'original', label: 'Orig' }
-                ] as { id: FilterType; label: string }[]
-              ).map((f) => (
+          {/* Row 3: Category Chips + Batch Filter Bar */}
+          <div className="flex items-center justify-between gap-2 overflow-x-auto pt-0.5 no-scrollbar">
+            <div className="flex items-center gap-1.5">
+              {[
+                { id: 'general', label: 'General' },
+                { id: 'facturi', label: 'Facturi' },
+                { id: 'contracte', label: 'Contracte' },
+                { id: 'acte', label: 'Acte ID' },
+                { id: 'notite', label: 'Notițe' }
+              ].map((cat) => (
                 <button
-                  key={f.id}
-                  disabled={isBatchFiltering}
-                  onClick={() => handleApplyBatchFilter(f.id)}
-                  className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-[10px] font-bold text-slate-300 transition whitespace-nowrap"
+                  key={cat.id}
+                  onClick={() => handleCategoryChange(cat.id as any)}
+                  className={`text-[11px] px-2.5 py-1 rounded-full font-bold transition whitespace-nowrap ${
+                    doc.category === cat.id
+                      ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
+                      : 'bg-slate-900/75 text-slate-400 hover:text-slate-200 border border-white/[0.06]'
+                  }`}
                 >
-                  {f.label}
+                  {cat.label}
                 </button>
               ))}
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Pages Grid */}
-      <div className="p-4 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {/* Batch Filter Quick Buttons */}
+            {pages.length > 0 && (
+              <div className="flex items-center gap-1 pl-2.5 border-l border-slate-800">
+                <Wand2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">
+                  Filtru toate:
+                </span>
+                {(
+                  [
+                    { id: 'magic', label: 'Magic' },
+                    { id: 'bw', label: 'Alb-Negru' },
+                    { id: 'sharp', label: 'Clar' },
+                    { id: 'original', label: 'Orig' }
+                  ] as { id: FilterType; label: string }[]
+                ).map((f) => (
+                  <button
+                    key={f.id}
+                    disabled={isBatchFiltering}
+                    onClick={() => handleApplyBatchFilter(f.id)}
+                    className="px-2 py-0.5 rounded-lg bg-slate-900 border border-white/[0.07] hover:bg-emerald-500 hover:text-slate-950 text-[10px] font-bold text-slate-300 transition whitespace-nowrap"
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Main Centered Pages Grid */}
+      <main className="max-w-5xl mx-auto w-full p-3.5 sm:p-6 flex-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-4">
           {pages.map((page, idx) => (
             <div
               key={page.id}
-              className="group relative bg-slate-900 border border-slate-800/90 rounded-2xl overflow-hidden shadow-lg hover:border-slate-700 transition flex flex-col"
+              className="group relative glass-card rounded-2xl overflow-hidden hover:border-emerald-500/40 transition flex flex-col"
             >
               {/* Thumbnail Container */}
               <div
@@ -400,102 +424,105 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
                   className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
                 />
 
-                {/* Page Number Badge */}
-                <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md text-[11px] font-bold text-white border border-white/10">
-                  {idx + 1}
+                {/* Top-Left: Page Number Badge */}
+                <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-[11px] font-extrabold text-white border border-white/15 shadow">
+                  #{idx + 1}
                 </span>
 
-                {/* Filter Badge */}
-                <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-emerald-950/80 backdrop-blur-md text-[10px] font-semibold text-emerald-300 border border-emerald-500/30 uppercase">
+                {/* Top-Right: Reorder Arrows (only if > 1 page) */}
+                {pages.length > 1 && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-md rounded-lg p-0.5 border border-white/15"
+                  >
+                    <button
+                      onClick={() => handleMovePage(idx, 'left')}
+                      disabled={idx === 0}
+                      className="p-1 rounded text-slate-200 hover:text-white disabled:opacity-25 hover:bg-white/10"
+                      title="Mută pagina înainte"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleMovePage(idx, 'right')}
+                      disabled={idx === pages.length - 1}
+                      className="p-1 rounded text-slate-200 hover:text-white disabled:opacity-25 hover:bg-white/10"
+                      title="Mută pagina după"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Bottom-Left: Filter Badge */}
+                <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-emerald-950/85 backdrop-blur-md text-[9px] font-extrabold text-emerald-300 border border-emerald-500/35 uppercase tracking-wider">
                   {page.filter}
                 </span>
 
                 {/* Tap to expand overlay */}
-                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
-                  <Maximize2 className="w-6 h-6 text-white" />
+                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition pointer-events-none">
+                  <Maximize2 className="w-6 h-6 text-white drop-shadow" />
                 </div>
               </div>
 
-              {/* Action Toolbar per page */}
-              <div className="p-2 bg-slate-900 flex items-center justify-between border-t border-slate-800/80">
-                <div className="flex items-center gap-0.5">
-                  {/* Reorder Left */}
-                  <button
-                    onClick={() => handleMovePage(idx, 'left')}
-                    disabled={idx === 0}
-                    className="p-1 rounded-lg text-slate-400 hover:text-white disabled:opacity-20 hover:bg-slate-800"
-                    title="Mută la stânga"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                  </button>
+              {/* Spacious 5-Button Action Toolbar per Page — Fits All Mobile Screens Cleanly */}
+              <div className="p-1.5 sm:p-2 bg-slate-950/60 border-t border-white/[0.06] grid grid-cols-5 gap-1">
+                {/* Rotate 90 */}
+                <button
+                  onClick={() => handleRotatePage(page)}
+                  className="py-1.5 rounded-xl flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/[0.08] active:scale-90 transition"
+                  title="Rotește 90°"
+                >
+                  <RotateCw className="w-4 h-4" />
+                </button>
 
-                  {/* Reorder Right */}
-                  <button
-                    onClick={() => handleMovePage(idx, 'right')}
-                    disabled={idx === pages.length - 1}
-                    className="p-1 rounded-lg text-slate-400 hover:text-white disabled:opacity-20 hover:bg-slate-800"
-                    title="Mută la dreapta"
-                  >
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
+                {/* Smart Eraser / Highlighter / Redact */}
+                <button
+                  onClick={() => setRetouchTargetPage(page)}
+                  className="py-1.5 rounded-xl flex items-center justify-center text-amber-400 hover:text-amber-300 hover:bg-amber-500/15 active:scale-90 transition"
+                  title="Radieră pete, Evidențiator & Cenzurare CNP"
+                >
+                  <Eraser className="w-4 h-4" />
+                </button>
 
-                  {/* Rotate 90 */}
-                  <button
-                    onClick={() => handleRotatePage(page)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                    title="Rotește 90°"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                  </button>
+                {/* OCR Button */}
+                <button
+                  onClick={() => setOcrTargetPage(page)}
+                  className="py-1.5 rounded-xl flex items-center justify-center text-purple-400 hover:text-purple-300 hover:bg-purple-500/15 active:scale-90 transition"
+                  title="Extrage text (OCR) & Cititor Vocal"
+                >
+                  <Sparkles className="w-4 h-4" />
+                </button>
 
-                  {/* Smart Eraser / Highlighter / Redact */}
-                  <button
-                    onClick={() => setRetouchTargetPage(page)}
-                    className="p-1 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-slate-800"
-                    title="Radieră pete, Evidențiator & Cenzurare CNP"
-                  >
-                    <Eraser className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* OCR Button */}
-                  <button
-                    onClick={() => setOcrTargetPage(page)}
-                    className="p-1 rounded-lg text-purple-400 hover:text-purple-300 hover:bg-slate-800"
-                    title="Extrage text (OCR)"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Sign & Stamp Page */}
-                  <button
-                    onClick={() => setSignViewPageIndex(idx)}
-                    className="p-1 rounded-lg text-blue-400 hover:text-blue-300 hover:bg-slate-800"
-                    title="Semnează / Ștampilează"
-                  >
-                    <PenTool className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {/* Sign & Stamp Page */}
+                <button
+                  onClick={() => setSignViewPageIndex(idx)}
+                  className="py-1.5 rounded-xl flex items-center justify-center text-blue-400 hover:text-blue-300 hover:bg-blue-500/15 active:scale-90 transition"
+                  title="Semnează / Ștampilează"
+                >
+                  <PenTool className="w-4 h-4" />
+                </button>
 
                 {/* Delete Page */}
                 <button
                   onClick={() => handleDeletePage(page.id)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                  className="py-1.5 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 active:scale-90 transition"
                   title="Șterge pagina"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
           ))}
 
           {/* Add Page Card */}
-          <div className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl aspect-[3/4] flex flex-col items-center justify-center p-4 gap-3 bg-slate-900/30 transition">
-            <span className="text-xs font-semibold text-slate-400">Adaugă Pagină</span>
-            <div className="flex gap-2">
+          <div className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl aspect-[3/4] flex flex-col items-center justify-center p-4 gap-3 bg-slate-900/35 transition">
+            <span className="text-xs font-bold text-slate-300">Adaugă Pagină</span>
+            <div className="flex gap-2.5">
               <button
                 onClick={() => onAddPageCamera(documentId)}
-                className="p-3 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500 hover:text-slate-950 transition active:scale-95"
-                title="Fă poză"
+                className="p-3.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/35 hover:bg-emerald-500 hover:text-slate-950 transition active:scale-95 shadow-lg"
+                title="Scanează cu camera"
               >
                 <Camera className="w-5 h-5" />
               </button>
@@ -512,7 +539,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="p-3 rounded-xl bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-white transition active:scale-95"
+                className="p-3.5 rounded-2xl bg-slate-800/90 text-slate-200 border border-white/10 hover:bg-slate-700 hover:text-white transition active:scale-95 shadow-lg"
                 title="Alege din galerie"
               >
                 <ImageIcon className="w-5 h-5" />
@@ -520,43 +547,35 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Floating Bottom Action Bar */}
-      <div className="fixed bottom-0 inset-x-0 bg-slate-900/95 border-t border-slate-800 px-4 py-3 backdrop-blur-md flex items-center justify-between gap-2 z-30">
-        <button
-          onClick={() => onAddPageCamera(documentId)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white font-semibold text-xs active:scale-95 transition"
-        >
-          <Camera className="w-4 h-4 text-emerald-400" />
-          <span>+ Poză</span>
-        </button>
+      {/* Floating Glass Bottom Action Dock — Centered on All Screens */}
+      <div className="fixed bottom-0 inset-x-0 z-30 px-3.5 pb-safe pt-2 pointer-events-none">
+        <div className="max-w-lg mx-auto glass-dock rounded-3xl p-2 flex items-center justify-between gap-1.5 sm:gap-2 pointer-events-auto">
+          <button
+            onClick={() => onAddPageCamera(documentId)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] text-white font-bold text-xs active:scale-95 transition"
+          >
+            <Camera className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="truncate">+ Pagină</span>
+          </button>
 
-        <button
-          onClick={() => {
-            if (pages[0]) setRetouchTargetPage(pages[0]);
-          }}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 font-semibold text-xs active:scale-95 transition"
-        >
-          <Eraser className="w-4 h-4 text-amber-400" />
-          <span>Radieră / Marker</span>
-        </button>
+          <button
+            onClick={() => setSignViewPageIndex(0)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] text-blue-300 font-bold text-xs active:scale-95 transition"
+          >
+            <PenTool className="w-4 h-4 text-blue-400 flex-shrink-0" />
+            <span className="truncate">Semnează</span>
+          </button>
 
-        <button
-          onClick={() => setSignViewPageIndex(0)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-blue-300 font-semibold text-xs active:scale-95 transition"
-        >
-          <PenTool className="w-4 h-4 text-blue-400" />
-          <span>Semnează</span>
-        </button>
-
-        <button
-          onClick={() => setShowExportModal(true)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition"
-        >
-          <Share2 className="w-4 h-4 stroke-[2.5]" />
-          <span>Export PDF</span>
-        </button>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="flex-[1.25] flex items-center justify-center gap-1.5 py-3 px-3 rounded-2xl bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500 hover:brightness-105 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/25 active:scale-95 transition"
+          >
+            <Share2 className="w-4 h-4 stroke-[2.5] flex-shrink-0" />
+            <span className="truncate">Export PDF</span>
+          </button>
+        </div>
       </div>
 
       {/* Fullscreen Page Preview Modal */}

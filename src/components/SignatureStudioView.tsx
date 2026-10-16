@@ -70,123 +70,125 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pb-24 select-none">
-      {/* Top Header */}
-      <div className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 pt-5 pb-3">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 p-2 -ml-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition"
-          >
-            <ChevronLeft className="w-6 h-6" />
-            <span className="text-sm font-semibold">Înapoi la Documente</span>
-          </button>
+    <div className="min-h-dvh bg-luxury-aurora text-slate-100 flex flex-col pb-24 select-none">
+      {/* Top Glass Header */}
+      <div className="sticky top-0 z-40 glass-header pt-safe">
+        <div className="max-w-5xl mx-auto w-full px-3.5 sm:px-6 pt-3 pb-3">
+          <div className="flex items-center justify-between gap-3 mb-2.5">
+            <button
+              onClick={onBack}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 -ml-1 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition"
+            >
+              <ChevronLeft className="w-5 h-5" />
+              <span className="text-xs sm:text-sm font-bold">Înapoi la Documente</span>
+            </button>
 
-          <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
-            {APP_VERSION} Activ
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-black text-white flex items-center gap-2">
-              <PenTool className="w-5 h-5 text-blue-400" />
-              <span>Studio Semnături & Ștampile</span>
-            </h1>
-            <p className="text-xs text-slate-400">
-              Creează și păstrează semnăturile și ștampilele tale pe telefon
-            </p>
+            <span className="text-[10px] sm:text-[11px] font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-2.5 py-0.5 rounded-full">
+              {APP_VERSION} Activ
+            </span>
           </div>
 
-          <button
-            onClick={() => handleOpenCreator(activeTab, activeTab === 'stamp' ? 'template' : 'draw')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 active:scale-95 transition"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Adaugă</span>
-          </button>
-        </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-xl font-extrabold text-white flex items-center gap-2 truncate">
+                <PenTool className="w-5 h-5 text-blue-400 flex-shrink-0" />
+                <span className="truncate">Studio Semnături & Ștampile</span>
+              </h1>
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate">
+                Creează și păstrează semnăturile și ștampilele tale pe dispozitiv
+              </p>
+            </div>
 
-        {/* Tab Switcher */}
-        <div className="flex bg-slate-950/80 p-1.5 rounded-xl border border-slate-800 gap-1.5 mt-3">
-          <button
-            onClick={() => setActiveTab('signature')}
-            className={`flex-1 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition ${
-              activeTab === 'signature'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <PenTool className="w-3.5 h-3.5" />
-            <span>Semnături ({sigCount})</span>
-          </button>
+            <button
+              onClick={() => handleOpenCreator(activeTab, activeTab === 'stamp' ? 'template' : 'draw')}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 active:scale-95 transition"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>Adaugă</span>
+            </button>
+          </div>
 
-          <button
-            onClick={() => setActiveTab('stamp')}
-            className={`flex-1 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition ${
-              activeTab === 'stamp'
-                ? 'bg-rose-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Stamp className="w-3.5 h-3.5" />
-            <span>Ștampile ({stampCount})</span>
-          </button>
+          {/* Tab Switcher */}
+          <div className="flex bg-slate-950/80 p-1.5 rounded-xl border border-slate-800/90 gap-1.5 mt-3 max-w-md">
+            <button
+              onClick={() => setActiveTab('signature')}
+              className={`flex-1 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition ${
+                activeTab === 'signature'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <PenTool className="w-3.5 h-3.5" />
+              <span>Semnături ({sigCount})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('stamp')}
+              className={`flex-1 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition ${
+                activeTab === 'stamp'
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Stamp className="w-3.5 h-3.5" />
+              <span>Ștampile ({stampCount})</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="p-4 space-y-4 flex-1">
+      <div className="max-w-5xl mx-auto w-full px-3.5 sm:px-6 py-4 space-y-5 flex-1">
         {/* Creation Modes Grid — each card opens that exact creation mode directly! */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
           <div
             onClick={() => handleOpenCreator(activeTab, 'draw')}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
+            className="p-3.5 sm:p-4 rounded-2xl glass-card hover:border-blue-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-blue-500/15 text-blue-400 group-hover:scale-110 transition">
               <PenTool className="w-5 h-5" />
             </div>
-            <span className="text-xs font-bold text-white">Desenează</span>
-            <span className="text-[10px] text-slate-400">Cu degetul pe ecran</span>
+            <span className="text-xs sm:text-sm font-bold text-white">Desenează</span>
+            <span className="text-[10px] sm:text-xs text-slate-400">Cu degetul sau mouse-ul</span>
           </div>
 
           <div
             onClick={() => handleOpenCreator(activeTab, 'scan')}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
+            className="p-3.5 sm:p-4 rounded-2xl glass-card hover:border-emerald-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 group-hover:scale-110 transition">
               <Camera className="w-5 h-5" />
             </div>
-            <span className="text-xs font-bold text-white">Scanează</span>
-            <span className="text-[10px] text-slate-400">De pe o foaie de hârtie</span>
+            <span className="text-xs sm:text-sm font-bold text-white">Scanează</span>
+            <span className="text-[10px] sm:text-xs text-slate-400">De pe o foaie de hârtie</span>
           </div>
 
           <div
             onClick={() => handleOpenCreator(activeTab, 'import')}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-purple-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
+            className="p-3.5 sm:p-4 rounded-2xl glass-card hover:border-purple-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-purple-500/15 text-purple-400 group-hover:scale-110 transition">
               <ImageIcon className="w-5 h-5" />
             </div>
-            <span className="text-xs font-bold text-white">Importă</span>
-            <span className="text-[10px] text-slate-400">Din pozele din telefon</span>
+            <span className="text-xs sm:text-sm font-bold text-white">Importă</span>
+            <span className="text-[10px] sm:text-xs text-slate-400">Din pozele din galerie</span>
           </div>
 
           <div
             onClick={() => handleOpenCreator('stamp', 'template')}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-rose-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
+            className="p-3.5 sm:p-4 rounded-2xl glass-card hover:border-rose-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-rose-500/15 text-rose-400 group-hover:scale-110 transition">
               <Sparkles className="w-5 h-5" />
             </div>
-            <span className="text-xs font-bold text-white">Șabloane</span>
-            <span className="text-[10px] text-slate-400">Conform cu originalul etc.</span>
+            <span className="text-xs sm:text-sm font-bold text-white">Șabloane</span>
+            <span className="text-[10px] sm:text-xs text-slate-400">Conform cu originalul etc.</span>
           </div>
         </div>
 
         {/* Saved Items Collection */}
-        <div className="pt-2">
-          <div className="flex items-center justify-between mb-3">
+        <div className="pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
               {activeTab === 'signature' ? 'Semnături Salvate' : 'Ștampile Salvate'} ({items.length})
             </span>
@@ -197,7 +199,7 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
           </div>
 
           {items.length === 0 ? (
-            <div className="p-10 text-center bg-slate-900/60 rounded-2xl border border-slate-800 border-dashed max-w-md mx-auto">
+            <div className="p-10 text-center glass-card rounded-3xl border-dashed max-w-md mx-auto">
               <div className="w-14 h-14 rounded-2xl bg-slate-800/80 flex items-center justify-center mx-auto mb-3 text-slate-400">
                 {activeTab === 'signature' ? (
                   <PenTool className="w-7 h-7" />
@@ -222,16 +224,16 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
               {items.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => setSelectedItemToUse(item)}
-                  className="group relative bg-slate-900 border border-slate-800 hover:border-blue-500/60 rounded-2xl p-3.5 cursor-pointer transition flex flex-col justify-between shadow-lg"
+                  className="group relative glass-card hover:border-blue-500/60 rounded-2xl p-3.5 cursor-pointer transition flex flex-col justify-between"
                 >
                   {/* Checkerboard preview */}
                   <div
-                    className="w-full aspect-[2/1] rounded-xl flex items-center justify-center p-2 mb-2 overflow-hidden border border-slate-800"
+                    className="w-full aspect-[2/1] rounded-xl flex items-center justify-center p-2 mb-2.5 overflow-hidden border border-slate-800/90"
                     style={{
                       backgroundImage:
                         'linear-gradient(45deg, #1e293b 25%, transparent 25%), linear-gradient(-45deg, #1e293b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1e293b 75%), linear-gradient(-45deg, transparent 75%, #1e293b 75%)',
@@ -246,9 +248,9 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
                     />
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-bold text-white truncate max-w-[110px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-white truncate">
                         {item.name}
                       </h4>
                       <p className="text-[10px] text-slate-400">
@@ -258,7 +260,7 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
 
                     <button
                       onClick={(e) => handleDelete(item.id, e)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition"
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition flex-shrink-0"
                       title="Șterge"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

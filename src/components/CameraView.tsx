@@ -318,80 +318,84 @@ export const CameraView: React.FC<CameraViewProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col justify-between overflow-hidden select-none">
+    <div className="fixed inset-0 z-50 h-dvh bg-black flex flex-col justify-between overflow-hidden select-none">
       {/* Top Action Bar */}
-      <div className="flex items-center justify-between px-4 pt-8 pb-4 z-20 bg-gradient-to-b from-black/85 via-black/40 to-transparent">
-        <button
-          onClick={onClose}
-          className="p-2.5 rounded-full bg-slate-900/60 backdrop-blur-md text-white hover:bg-slate-800 transition active:scale-95"
-          aria-label="Închide camera"
-        >
-          <X className="w-6 h-6" />
-        </button>
-
-        <div className="flex items-center gap-2">
-          {/* Auto-Snap AI Toggle */}
+      <div className="pt-safe z-20 bg-gradient-to-b from-black/85 via-black/45 to-transparent">
+        <div className="max-w-4xl mx-auto w-full flex items-center justify-between px-4 pt-3 pb-4">
           <button
-            onClick={() => {
-              setAutoSnap(!autoSnap);
-              stableCountRef.current = 0;
-              setStabilityProgress(0);
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-md transition ${
-              autoSnap
-                ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30'
-                : 'bg-slate-900/70 text-slate-300 border border-slate-700'
-            }`}
+            onClick={onClose}
+            className="p-2.5 rounded-full bg-slate-900/70 border border-white/10 backdrop-blur-md text-white hover:bg-slate-800 transition active:scale-95"
+            aria-label="Închide camera"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            {autoSnap ? 'Auto-Scan ON' : 'Manual'}
+            <X className="w-6 h-6" />
           </button>
 
-          {/* Batch Mode Toggle */}
-          <button
-            onClick={() => setBatchMode(!batchMode)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md transition ${
-              batchMode
-                ? 'bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/30'
-                : 'bg-slate-900/60 text-slate-300 hover:text-white'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            {batchMode ? 'Multiplu' : '1 Pag'}
-          </button>
-
-          {/* Torch Toggle */}
-          {hasTorch && (
+          <div className="flex items-center gap-2">
+            {/* Auto-Snap AI Toggle */}
             <button
-              onClick={toggleTorch}
-              className={`p-2.5 rounded-full backdrop-blur-md transition ${
-                torchOn ? 'bg-amber-400 text-slate-950' : 'bg-slate-900/60 text-white hover:bg-slate-800'
+              onClick={() => {
+                setAutoSnap(!autoSnap);
+                stableCountRef.current = 0;
+                setStabilityProgress(0);
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-md transition ${
+                autoSnap
+                  ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/30'
+                  : 'bg-slate-900/75 text-slate-300 border border-slate-700'
               }`}
-              aria-label="Lanternă"
             >
-              {torchOn ? <Zap className="w-5 h-5 fill-current" /> : <ZapOff className="w-5 h-5" />}
+              <Sparkles className="w-3.5 h-3.5" />
+              {autoSnap ? 'Auto-Scan ON' : 'Manual'}
             </button>
-          )}
 
-          {/* Camera Flip */}
-          <button
-            onClick={toggleFacingMode}
-            className="p-2.5 rounded-full bg-slate-900/60 backdrop-blur-md text-white hover:bg-slate-800 transition active:scale-95"
-            aria-label="Schimbă camera"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
+            {/* Batch Mode Toggle */}
+            <button
+              onClick={() => setBatchMode(!batchMode)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold backdrop-blur-md transition ${
+                batchMode
+                  ? 'bg-teal-500 text-slate-950 shadow-lg shadow-teal-500/30'
+                  : 'bg-slate-900/70 text-slate-300 hover:text-white border border-white/10'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              {batchMode ? 'Multiplu' : '1 Pag'}
+            </button>
+
+            {/* Torch Toggle */}
+            {hasTorch && (
+              <button
+                onClick={toggleTorch}
+                className={`p-2.5 rounded-full backdrop-blur-md transition ${
+                  torchOn
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'bg-slate-900/70 text-white hover:bg-slate-800 border border-white/10'
+                }`}
+                aria-label="Lanternă"
+              >
+                {torchOn ? <Zap className="w-5 h-5 fill-current" /> : <ZapOff className="w-5 h-5" />}
+              </button>
+            )}
+
+            {/* Camera Flip */}
+            <button
+              onClick={toggleFacingMode}
+              className="p-2.5 rounded-full bg-slate-900/70 border border-white/10 backdrop-blur-md text-white hover:bg-slate-800 transition active:scale-95"
+              aria-label="Schimbă camera"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Video Viewport & Live AI Document Overlay */}
-      <div className="relative flex-1 flex items-center justify-center overflow-hidden">
+      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
         {cameraError ? (
-          <div className="p-6 text-center max-w-sm mx-auto">
+          <div className="p-6 text-center max-w-sm mx-auto glass-card rounded-3xl">
             <p className="text-rose-400 mb-4 text-sm font-medium">{cameraError}</p>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold shadow-lg text-sm inline-flex items-center gap-2"
+              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-extrabold shadow-lg text-sm inline-flex items-center gap-2"
             >
               <ImageIcon className="w-4 h-4" />
               Alege din Galerie
@@ -421,90 +425,94 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
         {/* Dynamic Status Pill */}
         {!cameraError && (
-          <div className="absolute bottom-6 inset-x-0 flex justify-center pointer-events-none z-20">
+          <div className="absolute bottom-5 inset-x-4 flex justify-center pointer-events-none z-20">
             <div
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md border transition-all flex items-center gap-2 ${
+              className={`px-4 py-1.5 rounded-full text-xs font-bold backdrop-blur-md border transition-all flex items-center gap-2 text-center ${
                 docDetected
                   ? 'bg-emerald-950/85 border-emerald-400/60 text-emerald-200 shadow-lg shadow-emerald-950/50'
-                  : 'bg-black/65 border-white/15 text-slate-300'
+                  : 'bg-black/70 border-white/15 text-slate-300'
               }`}
             >
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
                   docDetected ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
                 }`}
               />
-              {docDetected
-                ? autoSnap && stabilityProgress > 15
-                  ? `Document încadrat • Ține nemișcat (${stabilityProgress}%)`
-                  : 'Document detectat automat — Apasă sau ține nemișcat'
-                : 'Îndreaptă camera spre foaie (va fi încadrată automat)'}
+              <span className="truncate">
+                {docDetected
+                  ? autoSnap && stabilityProgress > 15
+                    ? `Document încadrat • Ține nemișcat (${stabilityProgress}%)`
+                    : 'Document detectat automat — Apasă sau ține nemișcat'
+                  : 'Îndreaptă camera spre foaie (va fi încadrată automat)'}
+              </span>
             </div>
           </div>
         )}
       </div>
 
       {/* Bottom Controls Bar */}
-      <div className="px-6 pt-4 pb-8 bg-gradient-to-t from-black via-black/85 to-transparent z-20 flex items-center justify-between">
-        {/* Gallery Button */}
-        <div className="w-16 flex justify-start">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            multiple
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-700/60 text-slate-200 hover:text-white hover:bg-slate-800 transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg"
-            title="Importă din galerie"
-          >
-            <ImageIcon className="w-6 h-6" />
-          </button>
-        </div>
-
-        {/* Big Shutter Button with Auto-Snap Progress Ring */}
-        <div className="relative flex items-center justify-center">
-          <button
-            onClick={takePicture}
-            disabled={!!cameraError}
-            className={`w-20 h-20 rounded-full border-4 p-1.5 flex items-center justify-center shadow-2xl transition active:scale-90 group disabled:opacity-50 ${
-              docDetected ? 'border-emerald-400' : 'border-white/80'
-            }`}
-            aria-label="Fă fotografie"
-          >
-            <div
-              className={`w-full h-full rounded-full transition-colors shadow-inner flex items-center justify-center ${
-                docDetected
-                  ? 'bg-emerald-400 group-hover:bg-emerald-300'
-                  : 'bg-white group-hover:bg-emerald-400'
-              }`}
-            >
-              {autoSnap && stabilityProgress > 0 && (
-                <span className="text-xs font-extrabold text-slate-950">{stabilityProgress}%</span>
-              )}
-            </div>
-          </button>
-        </div>
-
-        {/* Batch Counter or Confirm Button */}
-        <div className="w-16 flex justify-end">
-          {batchMode && batchImages.length > 0 ? (
+      <div className="pb-safe bg-gradient-to-t from-black via-black/85 to-transparent z-20">
+        <div className="max-w-xl mx-auto w-full px-6 pt-3 pb-6 flex items-center justify-between">
+          {/* Gallery Button */}
+          <div className="w-16 flex justify-start">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              multiple
+              className="hidden"
+            />
             <button
-              onClick={handleFinishBatch}
-              className="relative p-3.5 rounded-2xl bg-emerald-500 text-slate-950 font-bold transition active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-emerald-500/30"
-              title="Finalizează scanarea"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-3.5 rounded-2xl bg-slate-900/85 border border-slate-700/70 text-slate-200 hover:text-white hover:bg-slate-800 transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg"
+              title="Importă din galerie"
             >
-              <Check className="w-6 h-6" />
-              <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-bold">
-                {batchImages.length}
-              </span>
+              <ImageIcon className="w-6 h-6" />
             </button>
-          ) : (
-            <div className="w-12 h-12" />
-          )}
+          </div>
+
+          {/* Big Shutter Button with Auto-Snap Progress Ring */}
+          <div className="relative flex items-center justify-center">
+            <button
+              onClick={takePicture}
+              disabled={!!cameraError}
+              className={`w-20 h-20 rounded-full border-4 p-1.5 flex items-center justify-center shadow-2xl transition active:scale-90 group disabled:opacity-50 ${
+                docDetected ? 'border-emerald-400' : 'border-white/80'
+              }`}
+              aria-label="Fă fotografie"
+            >
+              <div
+                className={`w-full h-full rounded-full transition-colors shadow-inner flex items-center justify-center ${
+                  docDetected
+                    ? 'bg-emerald-400 group-hover:bg-emerald-300'
+                    : 'bg-white group-hover:bg-emerald-400'
+                }`}
+              >
+                {autoSnap && stabilityProgress > 0 && (
+                  <span className="text-xs font-extrabold text-slate-950">{stabilityProgress}%</span>
+                )}
+              </div>
+            </button>
+          </div>
+
+          {/* Batch Counter or Confirm Button */}
+          <div className="w-16 flex justify-end">
+            {batchMode && batchImages.length > 0 ? (
+              <button
+                onClick={handleFinishBatch}
+                className="relative p-3.5 rounded-2xl bg-emerald-500 text-slate-950 font-bold transition active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-emerald-500/30"
+                title="Finalizează scanarea"
+              >
+                <Check className="w-6 h-6" />
+                <span className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-rose-500 text-white rounded-full text-[10px] font-bold">
+                  {batchImages.length}
+                </span>
+              </button>
+            ) : (
+              <div className="w-12 h-12" />
+            )}
+          </div>
         </div>
       </div>
     </div>

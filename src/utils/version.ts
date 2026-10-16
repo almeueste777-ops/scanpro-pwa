@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v3.1.0';
-export const APP_BUILD_NAME = 'Audit & Reparații Complete v3.1: Securitate PIN, Colaj A4 Interactiv, OCR Complet';
+export const APP_VERSION = 'v3.2.0';
+export const APP_BUILD_NAME = 'Obsidian & Emerald Glass Studio v3.2: Design Premium Adaptiv pe Toate Ecranele';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload

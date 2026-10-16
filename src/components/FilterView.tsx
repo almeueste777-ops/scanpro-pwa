@@ -133,55 +133,59 @@ export const FilterView: React.FC<FilterViewProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col justify-between overflow-hidden select-none">
+    <div className="fixed inset-0 z-50 h-dvh bg-luxury-aurora flex flex-col justify-between overflow-hidden select-none">
       {/* Top Header */}
-      <div className="flex items-center justify-between px-4 pt-8 pb-3 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md z-20">
-        <button
-          onClick={onBackToCrop}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 transition active:scale-95"
-          title="Ajustează manual cele 4 colțuri ale foii"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span className="text-xs font-bold">Ajustează Colțuri</span>
-        </button>
-
-        <div className="text-center">
-          <h2 className="text-sm font-bold text-white tracking-wide flex items-center justify-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Scanare Automată</span>
-          </h2>
-          <p className="text-[10px] text-emerald-400/90 font-medium">Încadrat & albit automat</p>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          {/* Rotate Button */}
+      <div className="glass-header pt-safe z-20">
+        <div className="max-w-4xl mx-auto w-full flex items-center justify-between px-3.5 sm:px-6 pt-3 pb-3 gap-2">
           <button
-            onClick={handleRotate}
-            className="p-2 rounded-full text-slate-300 hover:text-white hover:bg-slate-800 transition"
-            title="Rotește"
+            onClick={onBackToCrop}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 transition active:scale-95"
+            title="Ajustează manual cele 4 colțuri ale foii"
           >
-            <RotateCw className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4" />
+            <span className="text-xs font-bold">Colțuri</span>
           </button>
 
-          {/* Toggle Sliders */}
-          <button
-            onClick={() => setShowSliders(!showSliders)}
-            className={`p-2 rounded-full transition ${
-              showSliders ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-300 hover:bg-slate-800'
-            }`}
-            title="Ajustări luminozitate & contrast"
-          >
-            <Sliders className="w-5 h-5" />
-          </button>
+          <div className="text-center min-w-0">
+            <h2 className="text-xs sm:text-sm font-extrabold text-white tracking-wide flex items-center justify-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span className="truncate">Scanare Automată</span>
+            </h2>
+            <p className="text-[10px] text-emerald-400/90 font-medium truncate">
+              Încadrat & albit automat
+            </p>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {/* Rotate Button */}
+            <button
+              onClick={handleRotate}
+              className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800/80 transition"
+              title="Rotește"
+            >
+              <RotateCw className="w-5 h-5" />
+            </button>
+
+            {/* Toggle Sliders */}
+            <button
+              onClick={() => setShowSliders(!showSliders)}
+              className={`p-2 rounded-xl transition ${
+                showSliders ? 'bg-emerald-500/20 text-emerald-400' : 'text-slate-300 hover:bg-slate-800/80'
+              }`}
+              title="Ajustări luminozitate & contrast"
+            >
+              <Sliders className="w-5 h-5" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Main Preview */}
-      <div className="relative flex-1 w-full h-full flex items-center justify-center p-4 overflow-hidden bg-slate-950/60">
-        <div className="relative max-w-full max-h-full shadow-2xl rounded-lg overflow-hidden border border-slate-800">
+      <div className="relative flex-1 min-h-0 w-full flex items-center justify-center p-3 sm:p-6 overflow-hidden">
+        <div className="relative max-w-full max-h-full flex items-center justify-center shadow-2xl rounded-xl overflow-hidden border border-slate-800/90 bg-slate-950/60">
           <canvas
             ref={previewCanvasRef}
-            className="max-w-full max-h-[62vh] object-contain block mx-auto rounded-lg"
+            className="max-w-full max-h-[58dvh] sm:max-h-[66dvh] w-auto h-auto object-contain block mx-auto rounded-lg"
           />
 
           {/* Before / After Hold-to-Compare Pill */}
@@ -206,7 +210,7 @@ export const FilterView: React.FC<FilterViewProps> = ({
 
         {/* Floating Fine-Tuning Sliders Overlay */}
         {showSliders && (
-          <div className="absolute bottom-4 left-4 right-4 bg-slate-900/95 border border-slate-700/80 rounded-2xl p-4 backdrop-blur-xl shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="absolute bottom-3 inset-x-3 sm:inset-x-auto sm:w-96 bg-slate-900/95 border border-slate-700/80 rounded-2xl p-4 backdrop-blur-xl shadow-2xl z-30 animate-in fade-in slide-in-from-bottom-2 duration-200">
             <div className="flex justify-between items-center mb-3">
               <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                 Ajustări Fine
@@ -216,7 +220,7 @@ export const FilterView: React.FC<FilterViewProps> = ({
                   setBrightness(0);
                   setContrast(0);
                 }}
-                className="text-xs text-emerald-400 hover:text-emerald-300"
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-bold"
               >
                 Resetează
               </button>
@@ -257,50 +261,54 @@ export const FilterView: React.FC<FilterViewProps> = ({
         )}
       </div>
 
-      {/* Filter Selector Ribbon */}
-      <div className="bg-slate-900/95 border-t border-slate-800/80 backdrop-blur-md z-20">
-        <div className="flex items-center gap-2 overflow-x-auto px-4 py-3 no-scrollbar">
-          {FILTER_OPTIONS.map((f) => {
-            const isSelected = currentFilter === f.type;
-            return (
+      {/* Filter Selector Ribbon & Save Bar */}
+      <div className="glass-header border-t border-slate-800/80 pb-safe z-20">
+        <div className="max-w-2xl mx-auto w-full">
+          <div className="flex items-center sm:justify-center gap-2 overflow-x-auto px-3.5 py-2.5 no-scrollbar">
+            {FILTER_OPTIONS.map((f) => {
+              const isSelected = currentFilter === f.type;
+              return (
+                <button
+                  key={f.type}
+                  onClick={() => {
+                    setCurrentFilter(f.type);
+                    if (navigator.vibrate) navigator.vibrate(20);
+                  }}
+                  className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                    isSelected
+                      ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-[1.03]'
+                      : 'bg-slate-800/85 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-700/60'
+                  }`}
+                >
+                  {f.icon}
+                  <span>{f.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Bottom Save & Continue Action Bar */}
+          <div className="flex items-center justify-between px-3.5 pb-4 pt-1.5 gap-2.5">
+            {!isEditingExistingPage && (
               <button
-                key={f.type}
-                onClick={() => {
-                  setCurrentFilter(f.type);
-                  if (navigator.vibrate) navigator.vibrate(20);
-                }}
-                className={`flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all ${
-                  isSelected
-                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20 scale-105'
-                    : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
+                onClick={() => handleSave(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-white font-bold text-xs sm:text-sm transition active:scale-95 border border-slate-700/80"
               >
-                {f.icon}
-                <span>{f.label}</span>
+                <Plus className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <span className="truncate">Scanează Următoarea</span>
               </button>
-            );
-          })}
-        </div>
+            )}
 
-        {/* Bottom Save & Continue Action Bar */}
-        <div className="flex items-center justify-between px-5 pb-6 pt-2 gap-3">
-          {!isEditingExistingPage && (
             <button
-              onClick={() => handleSave(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm transition active:scale-95 border border-slate-700"
+              onClick={() => handleSave(false)}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-xs sm:text-sm shadow-xl shadow-emerald-500/25 transition active:scale-95"
             >
-              <Plus className="w-4 h-4 text-emerald-400" />
-              <span>Scanează Următoarea</span>
+              <Check className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5] flex-shrink-0" />
+              <span className="truncate">
+                {isEditingExistingPage ? 'Salvează Modificarea' : 'Finalizează Pagina'}
+              </span>
             </button>
-          )}
-
-          <button
-            onClick={() => handleSave(false)}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm shadow-xl shadow-emerald-500/25 transition active:scale-95"
-          >
-            <Check className="w-5 h-5 stroke-[2.5]" />
-            <span>{isEditingExistingPage ? 'Salvează Modificarea' : 'Finalizează Pagina'}</span>
-          </button>
+          </div>
         </div>
       </div>
     </div>
