@@ -3,20 +3,26 @@ import { RotateCw, Check, X, Maximize2, Sparkles } from 'lucide-react';
 import type { Point, DocumentCorners } from '../db';
 import {
   loadImage,
-  estimateDefaultCorners,
+  detectDocumentCornersSync,
   warpPerspective,
   rotateCanvas
 } from '../utils/imageProcessing';
 
 interface CropViewProps {
   imageSrc: string;
+  initialCorners?: DocumentCorners | null;
   onConfirmCrop: (warpedCanvas: HTMLCanvasElement, corners: DocumentCorners) => void;
   onCancel: () => void;
 }
 
 type CornerKey = 'tl' | 'tr' | 'br' | 'bl';
 
-export const CropView: React.FC<CropViewProps> = ({ imageSrc, onConfirmCrop, onCancel }) => {
+export const CropView: React.FC<CropViewProps> = ({
+  imageSrc,
+  initialCorners,
+  onConfirmCrop,
+  onCancel
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const loupeCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,19 +39,23 @@ export const CropView: React.FC<CropViewProps> = ({ imageSrc, onConfirmCrop, onC
     height: number;
   }>({ scale: 1, offsetX: 0, offsetY: 0, width: 0, height: 0 });
 
-  // Load image
+  // Load image and automatically detect document boundary corners
   useEffect(() => {
     let isMounted = true;
     loadImage(imageSrc).then((img) => {
       if (!isMounted) return;
       setImageObj(img);
-      const defaultC = estimateDefaultCorners(img.width, img.height);
-      setCorners(defaultC);
+      if (initialCorners) {
+        setCorners(initialCorners);
+      } else {
+        const detected = detectDocumentCornersSync(img, img.width, img.height);
+        setCorners(detected.corners);
+      }
     });
     return () => {
       isMounted = false;
     };
-  }, [imageSrc]);
+  }, [imageSrc, initialCorners]);
 
   // Update layout & render canvas
   const updateCanvasDisplay = useCallback(() => {
@@ -320,8 +330,8 @@ export const CropView: React.FC<CropViewProps> = ({ imageSrc, onConfirmCrop, onC
   // Auto-detect corners
   const handleAutoDetect = () => {
     if (!imageObj) return;
-    const est = estimateDefaultCorners(imageObj.width, imageObj.height);
-    setCorners(est);
+    const detected = detectDocumentCornersSync(imageObj, imageObj.width, imageObj.height);
+    setCorners(detected.corners);
     if (navigator.vibrate) navigator.vibrate(40);
   };
 
@@ -338,7 +348,8 @@ export const CropView: React.FC<CropViewProps> = ({ imageSrc, onConfirmCrop, onC
     const nextImg = new Image();
     nextImg.onload = () => {
       setImageObj(nextImg);
-      setCorners(estimateDefaultCorners(nextImg.width, nextImg.height));
+      const detected = detectDocumentCornersSync(nextImg, nextImg.width, nextImg.height);
+      setCorners(detected.corners);
     };
     nextImg.src = rotated.toDataURL('image/jpeg', 0.95);
   };

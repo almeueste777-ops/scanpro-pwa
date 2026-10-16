@@ -131,18 +131,25 @@ export const FilterView: React.FC<FilterViewProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col justify-between overflow-hidden select-none">
       {/* Top Header */}
-      <div className="flex items-center justify-between px-5 pt-8 pb-3 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md z-20">
+      <div className="flex items-center justify-between px-4 pt-8 pb-3 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md z-20">
         <button
           onClick={onBackToCrop}
-          className="flex items-center gap-1 p-2 -ml-2 rounded-full text-slate-300 hover:text-white hover:bg-slate-800 transition"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 transition active:scale-95"
+          title="Ajustează manual cele 4 colțuri ale foii"
         >
-          <ChevronLeft className="w-6 h-6" />
-          <span className="text-sm font-medium">Înapoi</span>
+          <ChevronLeft className="w-4 h-4" />
+          <span className="text-xs font-bold">Ajustează Colțuri</span>
         </button>
 
-        <h2 className="text-base font-semibold text-white tracking-wide">Filtru Document</h2>
+        <div className="text-center">
+          <h2 className="text-sm font-bold text-white tracking-wide flex items-center justify-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Scanare Automată</span>
+          </h2>
+          <p className="text-[10px] text-emerald-400/90 font-medium">Încadrat & albit automat</p>
+        </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {/* Rotate Button */}
           <button
             onClick={handleRotate}

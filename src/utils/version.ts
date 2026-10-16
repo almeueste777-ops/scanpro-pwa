@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v1.2.0';
-export const APP_BUILD_NAME = 'Semnături & Ștampile Digitale';
+export const APP_VERSION = 'v2.0.0';
+export const APP_BUILD_NAME = 'Auto-Scan AI & Magic Color Pro';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload

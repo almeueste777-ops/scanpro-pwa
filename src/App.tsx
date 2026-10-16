@@ -7,6 +7,11 @@ import {
   type DocumentCorners,
   type FilterType
 } from './db';
+import {
+  loadImage,
+  detectDocumentCornersSync,
+  warpPerspective
+} from './utils/imageProcessing';
 import { HomeView } from './components/HomeView';
 import { CameraView } from './components/CameraView';
 import { CropView } from './components/CropView';
@@ -30,6 +35,7 @@ export const App: React.FC = () => {
   const [currentRawImage, setCurrentRawImage] = useState<string | null>(null);
   const [currentWarpedCanvas, setCurrentWarpedCanvas] = useState<HTMLCanvasElement | null>(null);
   const [currentCorners, setCurrentCorners] = useState<DocumentCorners | null>(null);
+  const [isAutoProcessing, setIsAutoProcessing] = useState<boolean>(false);
 
   // Batch queue for scanning multiple pages
   const [batchQueue, setBatchQueue] = useState<string[]>([]);
@@ -44,14 +50,42 @@ export const App: React.FC = () => {
     refreshDocuments();
   }, [refreshDocuments]);
 
-  // Start new scan from Home (create fresh document or prepare batch)
+  /**
+   * CamScanner Pro Automatic Pipeline:
+   * Automatically detects the 4 corners of the sheet, straightens perspective,
+   * and opens the enhanced Magic Color scan directly.
+   */
+  const runAutoScanPipeline = useCallback(
+    async (imageDataUrl: string, preDetectedCorners?: DocumentCorners) => {
+      setIsAutoProcessing(true);
+      setCurrentRawImage(imageDataUrl);
+      try {
+        const img = await loadImage(imageDataUrl);
+        const corners =
+          preDetectedCorners ||
+          detectDocumentCornersSync(img, img.width, img.height).corners;
+        const warped = warpPerspective(img, corners);
+        setCurrentCorners(corners);
+        setCurrentWarpedCanvas(warped);
+        setActiveView('filter');
+      } catch (err) {
+        console.error('Auto-scan error, falling back to manual crop:', err);
+        setActiveView('crop');
+      } finally {
+        setIsAutoProcessing(false);
+      }
+    },
+    []
+  );
+
+  // Start new scan from Home
   const handleStartNewScanCamera = () => {
-    setTargetDocId(null); // will create new doc on first page save
+    setTargetDocId(null);
     setBatchQueue([]);
     setActiveView('camera');
   };
 
-  // Import from Gallery
+  // Import from Gallery -> Automatically detect corners, warp & enhance!
   const handleStartGalleryImport = (files: FileList, existingDocId?: string) => {
     const fileList = Array.from(files);
     if (fileList.length === 0) return;
@@ -71,16 +105,9 @@ export const App: React.FC = () => {
           loaded.push(e.target.result as string);
         }
         count++;
-        if (count === fileList.length) {
-          if (loaded.length === 1) {
-            setCurrentRawImage(loaded[0]);
-            setActiveView('crop');
-          } else {
-            // Batch queue
-            setCurrentRawImage(loaded[0]);
-            setBatchQueue(loaded.slice(1));
-            setActiveView('crop');
-          }
+        if (count === fileList.length && loaded.length > 0) {
+          setBatchQueue(loaded.slice(1));
+          runAutoScanPipeline(loaded[0]);
         }
       };
       reader.readAsDataURL(file);
@@ -94,18 +121,16 @@ export const App: React.FC = () => {
     setActiveView('camera');
   };
 
-  // Camera single image captured
-  const handleCameraCapture = (imageDataUrl: string) => {
-    setCurrentRawImage(imageDataUrl);
-    setActiveView('crop');
+  // Camera single image captured -> Automatically frame & enhance!
+  const handleCameraCapture = (imageDataUrl: string, detectedCorners?: DocumentCorners) => {
+    runAutoScanPipeline(imageDataUrl, detectedCorners);
   };
 
-  // Camera batch images captured
+  // Camera batch images captured -> Automatically frame & enhance first image
   const handleCameraBatchComplete = (images: string[]) => {
     if (images.length === 0) return;
-    setCurrentRawImage(images[0]);
     setBatchQueue(images.slice(1));
-    setActiveView('crop');
+    runAutoScanPipeline(images[0]);
   };
 
   // Crop confirmed -> go to filter view
@@ -127,7 +152,6 @@ export const App: React.FC = () => {
   ) => {
     if (!currentRawImage) return;
 
-    // 1. Determine or create document
     let docId = targetDocId;
     if (!docId) {
       const newDoc = await createDocument();
@@ -135,7 +159,6 @@ export const App: React.FC = () => {
       setTargetDocId(docId);
     }
 
-    // 2. Add page
     await addPageToDocument(docId, {
       originalImage: currentRawImage,
       processedImage,
@@ -151,17 +174,14 @@ export const App: React.FC = () => {
 
     await refreshDocuments();
 
-    // 3. Handle next step: batch queue or user chose "Scanează Următoarea"
+    // Handle next step: batch queue or user chose "Scanează Următoarea"
     if (batchQueue.length > 0) {
       const nextImg = batchQueue[0];
       setBatchQueue((prev) => prev.slice(1));
-      setCurrentRawImage(nextImg);
-      setActiveView('crop');
+      runAutoScanPipeline(nextImg);
     } else if (continueAdding) {
-      // User tapped "Scanează Următoarea"
       setActiveView('camera');
     } else {
-      // Done -> open document detail view
       setActiveView('detail');
     }
   };
@@ -171,8 +191,7 @@ export const App: React.FC = () => {
     if (batchQueue.length > 0) {
       const next = batchQueue[0];
       setBatchQueue((prev) => prev.slice(1));
-      setCurrentRawImage(next);
-      setActiveView('crop');
+      runAutoScanPipeline(next);
     } else if (targetDocId) {
       setActiveView('detail');
     } else {
@@ -182,6 +201,16 @@ export const App: React.FC = () => {
 
   return (
     <div className="w-full min-h-screen bg-slate-950 font-sans text-slate-100 flex flex-col justify-start">
+      {/* Loading overlay during instant auto-scan */}
+      {isAutoProcessing && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center gap-3">
+          <div className="w-12 h-12 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+          <p className="text-sm font-bold text-emerald-400 tracking-wide">
+            Se încadrează și se curăță automat foaia...
+          </p>
+        </div>
+      )}
+
       {/* 1. Home Dashboard View */}
       {activeView === 'home' && (
         <HomeView
@@ -217,6 +246,7 @@ export const App: React.FC = () => {
       {activeView === 'crop' && currentRawImage && (
         <CropView
           imageSrc={currentRawImage}
+          initialCorners={currentCorners}
           onConfirmCrop={handleConfirmCrop}
           onCancel={handleCancelCrop}
         />
@@ -244,6 +274,7 @@ export const App: React.FC = () => {
           onAddPageGallery={(docId, files) => handleStartGalleryImport(files, docId)}
           onEditPageCrop={(page) => {
             setCurrentRawImage(page.originalImage);
+            setCurrentCorners(page.corners || null);
             setActiveView('crop');
           }}
         />
