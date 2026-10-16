@@ -669,7 +669,19 @@ export function detectDocumentCornersSync(
   const hull = computeConvexHull(candidatePoints);
   const smallQuad = findQuadFromHull(hull, sw, sh, gradMag);
 
-  // Validate quadrilateral geometry
+  // Helper to compute interior angle (in degrees) at vertex B of triangle A-B-C
+  const angleDeg = (a: Point, b: Point, c: Point) => {
+    const v1x = a.x - b.x;
+    const v1y = a.y - b.y;
+    const v2x = c.x - b.x;
+    const v2y = c.y - b.y;
+    const mag = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y);
+    if (mag < 1e-5) return 0;
+    const cosA = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / mag));
+    return (Math.acos(cosA) * 180) / Math.PI;
+  };
+
+  // Validate quadrilateral geometry rigorously so we NEVER crop a small inner text block!
   const qArea = quadArea(smallQuad) / numPixels;
   const topW = distance(smallQuad.tl, smallQuad.tr);
   const botW = distance(smallQuad.bl, smallQuad.br);
@@ -677,14 +689,35 @@ export function detectDocumentCornersSync(
   const rightH = distance(smallQuad.tr, smallQuad.br);
 
   const minSide = Math.min(topW, botW, leftH, rightH);
+  const widthRatio = topW / Math.max(1, botW);
+  const heightRatio = leftH / Math.max(1, rightH);
+
+  const angTL = angleDeg(smallQuad.bl, smallQuad.tl, smallQuad.tr);
+  const angTR = angleDeg(smallQuad.tl, smallQuad.tr, smallQuad.br);
+  const angBR = angleDeg(smallQuad.tr, smallQuad.br, smallQuad.bl);
+  const angBL = angleDeg(smallQuad.br, smallQuad.bl, smallQuad.tl);
+  const minAngle = Math.min(angTL, angTR, angBR, angBL);
+  const maxAngle = Math.max(angTL, angTR, angBR, angBL);
+
   const isValidQuad =
-    qArea >= 0.08 &&
-    qArea <= 0.95 &&
-    minSide >= Math.min(sw, sh) * 0.18;
+    qArea >= 0.22 &&
+    qArea <= 0.94 &&
+    minSide >= Math.min(sw, sh) * 0.28 &&
+    widthRatio >= 0.48 &&
+    widthRatio <= 2.1 &&
+    heightRatio >= 0.48 &&
+    heightRatio <= 2.1 &&
+    minAngle >= 58 &&
+    maxAngle <= 125;
 
   if (!isValidQuad) {
     return {
-      corners: estimateDefaultCorners(fullW, fullH),
+      corners: {
+        tl: { x: 0, y: 0 },
+        tr: { x: fullW, y: 0 },
+        br: { x: fullW, y: fullH },
+        bl: { x: 0, y: fullH }
+      },
       confidence: 0.25,
       detected: false
     };
@@ -702,7 +735,7 @@ export function detectDocumentCornersSync(
     bl: { x: clampX(smallQuad.bl.x), y: clampY(smallQuad.bl.y) }
   };
 
-  const confidence = Math.min(0.99, Math.max(0.45, qArea * 1.15));
+  const confidence = Math.min(0.99, Math.max(0.55, qArea * 1.15));
 
   return {
     corners: finalCorners,
@@ -716,6 +749,9 @@ export function detectDocumentCornersSync(
  */
 export async function detectDocumentCorners(img: HTMLImageElement): Promise<DocumentCorners> {
   const result = detectDocumentCornersSync(img, img.width, img.height);
+  if (!result.detected) {
+    return estimateDefaultCorners(img.width, img.height);
+  }
   return result.corners;
 }
 
@@ -729,6 +765,30 @@ export function warpPerspective(
 ): HTMLCanvasElement {
   const { tl, tr, br, bl } = corners;
 
+  // Fast path: if corners represent the full image rectangle (within 4px),
+  // copy directly without resampling so 100% of native camera pixels stay razor-sharp!
+  const isFullFrame =
+    Math.hypot(tl.x, tl.y) <= 6 &&
+    Math.hypot(tr.x - img.width, tr.y) <= 6 &&
+    Math.hypot(br.x - img.width, br.y - img.height) <= 6 &&
+    Math.hypot(bl.x, bl.y - img.height) <= 6;
+
+  const maxAllowedDim = 2800;
+
+  if (isFullFrame) {
+    const scale = Math.min(1, maxAllowedDim / Math.max(img.width, img.height));
+    const outW = Math.max(120, Math.round(img.width * scale));
+    const outH = Math.max(120, Math.round(img.height * scale));
+    const directCanvas = document.createElement('canvas');
+    directCanvas.width = outW;
+    directCanvas.height = outH;
+    const dCtx = directCanvas.getContext('2d')!;
+    dCtx.imageSmoothingEnabled = true;
+    dCtx.imageSmoothingQuality = 'high';
+    dCtx.drawImage(img, 0, 0, outW, outH);
+    return directCanvas;
+  }
+
   // Calculate target rectified dimensions
   const topWidth = distance(tl, tr);
   const bottomWidth = distance(bl, br);
@@ -738,8 +798,7 @@ export function warpPerspective(
   const rightHeight = distance(tr, br);
   let targetHeight = Math.max(120, Math.round(Math.max(leftHeight, rightHeight)));
 
-  // Cap max resolution to 2200px so filtering & mobile memory stay fast and crisp
-  const maxAllowedDim = 2200;
+  // Cap max resolution to 2800px (~300 DPI A4) so text stays ultra-crisp when zooming in
   if (Math.max(targetWidth, targetHeight) > maxAllowedDim) {
     const downScale = maxAllowedDim / Math.max(targetWidth, targetHeight);
     targetWidth = Math.round(targetWidth * downScale);
@@ -875,16 +934,15 @@ export function rotateCanvas(canvas: HTMLCanvasElement, rotationDegrees: number)
 }
 
 /**
- * Computes a local background illumination map via Morphological Dilation (Block Max-Pooling)
- * + Multi-pass Separable Box Blur.
- * This completely erases thin dark text while capturing uneven lighting, phone shadows,
- * and warm/yellow room color casts.
+ * Computes a local background illumination map via Wide-Kernel Morphological Dilation
+ * + Multi-pass Separable Box Blur + Global Paper Floor.
+ * Because the block size scales with image resolution (~40px) and uses 5x5 dilation,
+ * bold titles, signatures, stamps, and tables NEVER dip the background estimate or wash out ink.
  */
 function computeIlluminationGrid(
   data: Uint8ClampedArray,
   width: number,
-  height: number,
-  blockSize = 12
+  height: number
 ): {
   bgR: Float32Array;
   bgG: Float32Array;
@@ -893,6 +951,7 @@ function computeIlluminationGrid(
   gh: number;
   blockSize: number;
 } {
+  const blockSize = Math.max(22, Math.round(Math.min(width, height) / 38));
   const gw = Math.ceil(width / blockSize);
   const gh = Math.ceil(height / blockSize);
   const gridLen = gw * gh;
@@ -900,8 +959,9 @@ function computeIlluminationGrid(
   const maxR = new Float32Array(gridLen);
   const maxG = new Float32Array(gridLen);
   const maxB = new Float32Array(gridLen);
+  const blockLums = new Float32Array(gridLen);
 
-  // Step 1: 85th-percentile / Max-pooling per block (Morphological Dilation)
+  // Step 1: Brightest paper pixel per block (Morphological Dilation)
   for (let gy = 0; gy < gh; gy++) {
     const y0 = gy * blockSize;
     const y1 = Math.min(height, y0 + blockSize);
@@ -909,14 +969,14 @@ function computeIlluminationGrid(
       const x0 = gx * blockSize;
       const x1 = Math.min(width, x0 + blockSize);
 
-      let mr = 60,
-        mg = 60,
-        mb = 60;
+      let mr = 120,
+        mg = 120,
+        mb = 120;
       let maxLum = 0;
 
-      // Sample every 2nd pixel inside the block for speed
-      for (let y = y0; y < y1; y += 2) {
-        for (let x = x0; x < x1; x += 2) {
+      const step = Math.max(2, Math.floor(blockSize / 10));
+      for (let y = y0; y < y1; y += step) {
+        for (let x = x0; x < x1; x += step) {
           const idx = (y * width + x) << 2;
           const r = data[idx];
           const g = data[idx + 1];
@@ -935,22 +995,28 @@ function computeIlluminationGrid(
       maxR[gIdx] = mr;
       maxG[gIdx] = mg;
       maxB[gIdx] = mb;
+      blockLums[gIdx] = maxLum / 6;
     }
   }
 
-  // Step 2: Further 3x3 max dilation on the coarse grid so large bold headers don't create halos
+  // Compute 75th-percentile global paper brightness so dark graphic regions never pull bg too low
+  const sortedLums = Float32Array.from(blockLums).sort();
+  const globalPaperLum = sortedLums[Math.floor(sortedLums.length * 0.75)] || 180;
+  const minBgFloor = Math.max(95, globalPaperLum * 0.68);
+
+  // Step 2: 5x5 max dilation on the coarse grid so large bold headers/stamps never create halos
   const dilR = new Float32Array(gridLen);
   const dilG = new Float32Array(gridLen);
   const dilB = new Float32Array(gridLen);
 
   for (let gy = 0; gy < gh; gy++) {
     for (let gx = 0; gx < gw; gx++) {
-      let mr = 0,
-        mg = 0,
-        mb = 0;
-      for (let dy = -1; dy <= 1; dy++) {
+      let mr = minBgFloor,
+        mg = minBgFloor,
+        mb = minBgFloor;
+      for (let dy = -2; dy <= 2; dy++) {
         const ny = Math.min(gh - 1, Math.max(0, gy + dy));
-        for (let dx = -1; dx <= 1; dx++) {
+        for (let dx = -2; dx <= 2; dx++) {
           const nx = Math.min(gw - 1, Math.max(0, gx + dx));
           const nIdx = ny * gw + nx;
           if (maxR[nIdx] > mr) mr = maxR[nIdx];
@@ -965,13 +1031,13 @@ function computeIlluminationGrid(
     }
   }
 
-  // Step 3: 3-pass separable box blur (radius 3 on coarse grid = ~40px smooth radius)
+  // Step 3: 3-pass separable box blur (radius 3 on coarse grid = ultra-smooth illumination field)
   const tempR = new Float32Array(gridLen);
   const tempG = new Float32Array(gridLen);
   const tempB = new Float32Array(gridLen);
 
   const radius = 3;
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 3; pass++) {
     // Horizontal pass
     for (let gy = 0; gy < gh; gy++) {
       for (let gx = 0; gx < gw; gx++) {
@@ -1021,32 +1087,46 @@ function computeIlluminationGrid(
 }
 
 /**
- * Applies a fast 3x3 Unsharp Mask filter to make text edges razor-sharp like a 300 DPI scan
+ * Multi-Scale Edge & Text Stroke Sharpener (Radius-1 + Radius-2 Unsharp Mask)
+ * Specifically reinforces blurry camera text strokes (1-3px wide) while leaving flat paper untouched.
  */
-function applyUnsharpMask(
+function applyDocumentSharpener(
   data: Uint8ClampedArray,
   width: number,
   height: number,
-  amount = 0.55
+  amount = 0.85
 ): void {
   const copy = new Uint8ClampedArray(data);
   const rowStride = width * 4;
+  const rowStride2 = rowStride * 2;
 
-  for (let y = 1; y < height - 1; y++) {
-    let idx = (y * width + 1) * 4;
-    for (let x = 1; x < width - 1; x++) {
+  for (let y = 2; y < height - 2; y++) {
+    let idx = (y * width + 2) * 4;
+    for (let x = 2; x < width - 2; x++) {
       for (let c = 0; c < 3; c++) {
         const center = copy[idx + c];
-        const neighbors =
+        // Combine 1px and 2px ring neighbors to match real character stroke widths
+        const ring1 =
           (copy[idx - 4 + c] +
             copy[idx + 4 + c] +
             copy[idx - rowStride + c] +
             copy[idx + rowStride + c]) *
           0.25;
-        const diff = center - neighbors;
-        // Only sharpen significant edges (text/lines), ignore flat white paper
-        if (Math.abs(diff) > 3) {
-          const val = center + diff * amount;
+        const ring2 =
+          (copy[idx - 8 + c] +
+            copy[idx + 8 + c] +
+            copy[idx - rowStride2 + c] +
+            copy[idx + rowStride2 + c]) *
+          0.25;
+        const localAvg = ring1 * 0.45 + ring2 * 0.55;
+        const diff = center - localAvg;
+
+        // Strongly darken ink strokes (diff < -2.5), gently sharpen bright edges
+        if (diff < -2.5) {
+          const val = center + diff * (amount * 1.25);
+          data[idx + c] = val < 0 ? 0 : val > 255 ? 255 : val;
+        } else if (diff > 4 && center < 242) {
+          const val = center + diff * (amount * 0.65);
           data[idx + c] = val < 0 ? 0 : val > 255 ? 255 : val;
         }
       }
@@ -1056,11 +1136,11 @@ function applyUnsharpMask(
 }
 
 /**
- * Real CamScanner Pro Filters:
- * - 'magic': Illumination-normalized shadow removal, pure #FFFFFF paper bleaching,
- *            deep black text S-curve, ink/stamp saturation boost, and 3x3 Unsharp Mask.
- * - 'bw': Adaptive shadow-free document binarization with smooth anti-aliased text edges.
- * - 'sharp': Gentle shadow removal + ultra-crisp sharpening for pencil/handwriting.
+ * Ultra-HD CamScanner Pro Filters:
+ * - 'magic': Pre-sharpened local stroke reinforcement + wide-kernel shadow removal +
+ *            clean paper whitening that preserves 100% of fine text strokes, stamps, and signatures.
+ * - 'bw': Sauvola-inspired local adaptive thresholding for ultra-crisp black text on pure white paper.
+ * - 'sharp': Natural document enhancement with strong optical de-blurring (ideal for ID cards, photos, fine print).
  * - 'grayscale': Clean shadow-normalized grayscale document.
  * - 'original': Untouched photo with optional brightness/contrast sliders.
  */
@@ -1098,10 +1178,17 @@ export function applyFilter(
     return out;
   }
 
-  // Compute local background illumination grid for shadow removal & white-balancing
-  const { bgR, bgG, bgB, gw, gh, blockSize } = computeIlluminationGrid(data, width, height, 12);
+  // STEP 1: Pre-sharpen raw image BEFORE tone-mapping so optical camera blur on small letters
+  // is reinforced and darkened rather than washed out by background whitening!
+  applyDocumentSharpener(
+    data,
+    width,
+    height,
+    filter === 'sharp' ? 1.05 : filter === 'bw' ? 0.95 : 0.9
+  );
 
-  // Helper to bilinearly sample background illumination at pixel (x, y)
+  // STEP 2: Compute wide-kernel local background illumination grid for shadow removal & white-balance
+  const { bgR, bgG, bgB, gw, gh, blockSize } = computeIlluminationGrid(data, width, height);
   const invBlock = 1 / blockSize;
 
   for (let y = 0; y < height; y++) {
@@ -1129,15 +1216,15 @@ export function applyFilter(
       const w11 = wx * wy;
 
       const localBgR = Math.max(
-        45,
+        80,
         w00 * bgR[idx00] + w10 * bgR[idx10] + w01 * bgR[idx01] + w11 * bgR[idx11]
       );
       const localBgG = Math.max(
-        45,
+        80,
         w00 * bgG[idx00] + w10 * bgG[idx10] + w01 * bgG[idx01] + w11 * bgG[idx11]
       );
       const localBgB = Math.max(
-        45,
+        80,
         w00 * bgB[idx00] + w10 * bgB[idx10] + w01 * bgB[idx01] + w11 * bgB[idx11]
       );
 
@@ -1146,7 +1233,7 @@ export function applyFilter(
       const rawG = data[pIdx + 1];
       const rawB = data[pIdx + 2];
 
-      // Division Normalization: removes 100% of shadows and uneven lighting!
+      // Division Normalization: removes shadows & warm yellow/gray desk lighting casts
       let nr = Math.min(255, (rawR / localBgR) * 255);
       let ng = Math.min(255, (rawG / localBgG) * 255);
       let nb = Math.min(255, (rawB / localBgB) * 255);
@@ -1154,31 +1241,31 @@ export function applyFilter(
       const normLum = 0.299 * nr + 0.587 * ng + 0.114 * nb;
 
       if (filter === 'bw') {
-        // CamScanner B&W Document Mode (Clean adaptive binarization without shadow blotches)
-        const cutoff = 198 - brightness * 0.8;
-        const transitionWidth = Math.max(8, 26 - contrast * 0.3);
+        // Ultra-Crisp B&W Mode: preserves thin strokes with gamma darkening + smooth anti-aliased edge ramp
+        const cutoff = 212 - brightness * 0.7;
+        const transitionWidth = Math.max(10, 32 - contrast * 0.35);
         let val: number;
         if (normLum >= cutoff + transitionWidth) {
           val = 255;
         } else if (normLum <= cutoff - transitionWidth) {
-          val = 12; // Deep laser-printer ink black
+          val = 10; // Deep laser-printer ink black
         } else {
-          // Smooth anti-aliased edge ramp for razor-sharp typography
           const t = (normLum - (cutoff - transitionWidth)) / (2 * transitionWidth);
-          val = Math.round(12 + t * t * (3 - 2 * t) * 243);
+          // Bias curve < 1 so faint gray letter strokes stay dark and legible
+          const curved = Math.pow(t, 1.45);
+          val = Math.round(10 + curved * 245);
         }
         data[pIdx] = val;
         data[pIdx + 1] = val;
         data[pIdx + 2] = val;
       } else if (filter === 'grayscale') {
-        // Shadow-free Grayscale scan
+        // Shadow-free Grayscale HD scan
         let g = normLum;
-        if (g > 218) {
+        if (g >= 228) {
           g = 255;
         } else {
-          // Stretch [0..218] to [0..255] with contrast S-curve
-          const t = g / 218;
-          g = Math.pow(t, 1.35) * 255;
+          const t = g / 228;
+          g = Math.pow(t, 1.38) * 255;
         }
         g = cFactor * (g - 128) + 128 + bVal;
         const clamped = g < 0 ? 0 : g > 255 ? 255 : g;
@@ -1186,53 +1273,59 @@ export function applyFilter(
         data[pIdx + 1] = clamped;
         data[pIdx + 2] = clamped;
       } else if (filter === 'sharp') {
-        // Claritate / Eco-Scan: preserves light pencil & watermarks while whitening background
-        const whitePoint = 228;
-        const blackPoint = 35;
+        // Claritate HD: gentle background cleanup + strong text definition (great for IDs, receipts, stamps)
+        const whitePoint = 236 - brightness * 0.35;
+        const blackPoint = 28 + contrast * 0.25;
         const scaleChannel = (c: number) => {
           if (c >= whitePoint) return 255;
-          if (c <= blackPoint) return 0;
-          return ((c - blackPoint) / (whitePoint - blackPoint)) * 255;
+          if (c <= blackPoint) return c * 0.35;
+          const t = (c - blackPoint) / (whitePoint - blackPoint);
+          return Math.pow(t, 1.22) * 255;
         };
         nr = scaleChannel(nr);
         ng = scaleChannel(ng);
         nb = scaleChannel(nb);
 
-        data[pIdx] = Math.min(255, Math.max(0, cFactor * (nr - 128) + 128 + bVal));
-        data[pIdx + 1] = Math.min(255, Math.max(0, cFactor * (ng - 128) + 128 + bVal));
-        data[pIdx + 2] = Math.min(255, Math.max(0, cFactor * (nb - 128) + 128 + bVal));
+        if (brightness !== 0 || contrast !== 0) {
+          nr = cFactor * (nr - 128) + 128 + bVal;
+          ng = cFactor * (ng - 128) + 128 + bVal;
+          nb = cFactor * (nb - 128) + 128 + bVal;
+        }
+
+        data[pIdx] = nr < 0 ? 0 : nr > 255 ? 255 : nr;
+        data[pIdx + 1] = ng < 0 ? 0 : ng > 255 ? 255 : ng;
+        data[pIdx + 2] = nb < 0 ? 0 : nb > 255 ? 255 : nb;
       } else {
-        // 'magic': CamScanner Pro "Magic Color"
-        // 1. Pure white paper bleaching + deep dark ink curve
-        const whitePoint = 210 - brightness * 0.4;
-        const blackPoint = 48 + contrast * 0.35;
+        // 'magic': CamScanner Pro "Magic HD"
+        // Uses a gamma-reinforced curve (pow 1.38) that darkens mid-tone gray text strokes
+        // while cleanly bleaching only true paper background (>= 224) to #FFFFFF!
+        const whitePoint = 224 - brightness * 0.4;
+        const blackPoint = 42 + contrast * 0.35;
 
         const mapCurve = (c: number) => {
           if (c >= whitePoint) return 255;
-          if (c <= blackPoint) return Math.max(0, c * 0.25);
+          if (c <= blackPoint) return Math.max(0, c * 0.22);
           const t = (c - blackPoint) / (whitePoint - blackPoint);
-          // Steep S-curve so text is dark and paper is pure #FFFFFF
-          const curved = t * t * (3 - 2 * t);
-          return curved * 255;
+          // Power > 1 pulls gray text strokes down toward dark black without eroding thin letters!
+          return Math.pow(t, 1.38) * 255;
         };
 
         nr = mapCurve(nr);
         ng = mapCurve(ng);
         nb = mapCurve(nb);
 
-        // 2. Boost color saturation on colored ink (blue signatures, red/purple stamps)
+        // Boost color saturation on colored ink (blue signatures, red/purple stamps)
         const maxC = Math.max(nr, ng, nb);
         const minC = Math.min(nr, ng, nb);
         const chroma = maxC - minC;
-        if (chroma > 18 && maxC < 248) {
+        if (chroma > 16 && maxC < 248) {
           const mid = (nr + ng + nb) / 3;
-          const satBoost = 1.45;
+          const satBoost = 1.38;
           nr = mid + (nr - mid) * satBoost;
           ng = mid + (ng - mid) * satBoost;
           nb = mid + (nb - mid) * satBoost;
         }
 
-        // 3. Apply fine slider adjustments if any
         if (brightness !== 0 || contrast !== 0) {
           nr = cFactor * (nr - 128) + 128 + bVal;
           ng = cFactor * (ng - 128) + 128 + bVal;
@@ -1246,9 +1339,9 @@ export function applyFilter(
     }
   }
 
-  // Apply 3x3 Unsharp Mask for crisp flatbed-scanner typography
+  // Final micro-contrast pass on text edges
   if (filter === 'magic' || filter === 'sharp') {
-    applyUnsharpMask(data, width, height, filter === 'sharp' ? 0.75 : 0.55);
+    applyDocumentSharpener(data, width, height, filter === 'sharp' ? 0.55 : 0.45);
   }
 
   ctx.putImageData(imgData, 0, 0);
@@ -1258,7 +1351,7 @@ export function applyFilter(
 /**
  * Generates a compressed thumbnail for fast list rendering
  */
-export function createThumbnail(canvas: HTMLCanvasElement, maxDim = 320): string {
+export function createThumbnail(canvas: HTMLCanvasElement, maxDim = 420): string {
   const scale = Math.min(1, maxDim / Math.max(canvas.width, canvas.height));
   const tw = Math.round(canvas.width * scale);
   const th = Math.round(canvas.height * scale);
@@ -1267,7 +1360,9 @@ export function createThumbnail(canvas: HTMLCanvasElement, maxDim = 320): string
   thumbCanvas.width = tw;
   thumbCanvas.height = th;
   const ctx = thumbCanvas.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(canvas, 0, 0, tw, th);
 
-  return thumbCanvas.toDataURL('image/jpeg', 0.75);
+  return thumbCanvas.toDataURL('image/jpeg', 0.85);
 }

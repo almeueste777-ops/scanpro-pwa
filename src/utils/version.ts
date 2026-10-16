@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v3.2.0';
-export const APP_BUILD_NAME = 'Obsidian & Emerald Glass Studio v3.2: Design Premium Adaptiv pe Toate Ecranele';
+export const APP_VERSION = 'v3.3.0';
+export const APP_BUILD_NAME = 'Ultra-HD Scan Engine v3.3: Zoom & Pan Interactiv, Claritate Text Maximizată, Cameră 4K';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload

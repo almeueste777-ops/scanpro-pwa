@@ -16,7 +16,9 @@ import {
   Eraser,
   Wand2,
   Cpu,
-  LayoutGrid
+  LayoutGrid,
+  LayoutList,
+  ZoomIn
 } from 'lucide-react';
 import {
   db,
@@ -41,6 +43,7 @@ import { SignDocumentView } from './SignDocumentView';
 import { PageRetouchModal } from './PageRetouchModal';
 import { SmartDataModal } from './SmartDataModal';
 import { CollageModal } from './CollageModal';
+import { ZoomablePreviewModal } from './ZoomablePreviewModal';
 
 interface DocumentDetailProps {
   documentId: string;
@@ -70,7 +73,8 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const [showCollageModal, setShowCollageModal] = useState(false);
   const [ocrTargetPage, setOcrTargetPage] = useState<DocumentPage | null>(null);
   const [retouchTargetPage, setRetouchTargetPage] = useState<DocumentPage | null>(null);
-  const [fullPreviewPage, setFullPreviewPage] = useState<DocumentPage | null>(null);
+  const [fullPreviewPageIndex, setFullPreviewPageIndex] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'large'>('grid');
   const [signViewPageIndex, setSignViewPageIndex] = useState<number | null>(
     initialSignatureToPlace ? 0 : null
   );
@@ -405,9 +409,54 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         </div>
       </header>
 
-      {/* Main Centered Pages Grid */}
+      {/* Main Centered Pages Section */}
       <main className="max-w-5xl mx-auto w-full p-3.5 sm:p-6 flex-1">
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-4">
+        {/* View Mode & Page Count Subheader */}
+        <div className="flex items-center justify-between gap-3 mb-3 px-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-white">
+              {pages.length} {pages.length === 1 ? 'pagină scanată' : 'pagini scanate'}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              • Atinge o pagină pentru Zoom HD & Citire
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-800 p-0.5 rounded-xl">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                viewMode === 'grid'
+                  ? 'bg-emerald-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Vizualizare Grilă (2 coloane)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="text-[10px] hidden sm:inline">Grilă</span>
+            </button>
+            <button
+              onClick={() => setViewMode('large')}
+              className={`p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                viewMode === 'large'
+                  ? 'bg-emerald-500 text-slate-950 shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+              title="Vizualizare Mare (Citire)"
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+              <span className="text-[10px] hidden sm:inline">Pagină Mare</span>
+            </button>
+          </div>
+        </div>
+
+        <div
+          className={
+            viewMode === 'large'
+              ? 'grid grid-cols-1 max-w-xl mx-auto gap-5'
+              : 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-4'
+          }
+        >
           {pages.map((page, idx) => (
             <div
               key={page.id}
@@ -415,7 +464,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             >
               {/* Thumbnail Container */}
               <div
-                onClick={() => setFullPreviewPage(page)}
+                onClick={() => setFullPreviewPageIndex(idx)}
                 className="relative aspect-[3/4] bg-slate-950 flex items-center justify-center cursor-pointer overflow-hidden"
               >
                 <img
@@ -457,6 +506,12 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
                 {/* Bottom-Left: Filter Badge */}
                 <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-emerald-950/85 backdrop-blur-md text-[9px] font-extrabold text-emerald-300 border border-emerald-500/35 uppercase tracking-wider">
                   {page.filter}
+                </span>
+
+                {/* Bottom-Right: Zoom HD Pill */}
+                <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[10px] font-extrabold text-emerald-400 border border-emerald-500/30 flex items-center gap-1 shadow">
+                  <ZoomIn className="w-3 h-3" />
+                  <span>Zoom HD</span>
                 </span>
 
                 {/* Tap to expand overlay */}
@@ -578,48 +633,18 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         </div>
       </div>
 
-      {/* Fullscreen Page Preview Modal */}
-      {fullPreviewPage && (
-        <div
-          onClick={() => setFullPreviewPage(null)}
-          className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 backdrop-blur-md"
-        >
-          <img
-            src={fullPreviewPage.processedImage || fullPreviewPage.originalImage}
-            alt="Fullscreen"
-            className="max-w-full max-h-[82vh] object-contain rounded-lg shadow-2xl"
-          />
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setFullPreviewPage(null);
-                onEditPageCrop(fullPreviewPage);
-              }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold"
-            >
-              Ajustează Colțuri
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                const target = fullPreviewPage;
-                setFullPreviewPage(null);
-                setRetouchTargetPage(target);
-              }}
-              className="px-4 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center gap-1.5"
-            >
-              <Eraser className="w-3.5 h-3.5" />
-              Radieră / Marker
-            </button>
-            <button
-              onClick={() => setFullPreviewPage(null)}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-xs font-semibold"
-            >
-              Închide
-            </button>
-          </div>
-        </div>
+      {/* Interactive HD Zoom & Pan Modal */}
+      {fullPreviewPageIndex !== null && doc && (
+        <ZoomablePreviewModal
+          pages={pages}
+          initialPageIndex={fullPreviewPageIndex}
+          documentTitle={doc.title}
+          onClose={() => setFullPreviewPageIndex(null)}
+          onEditCrop={(page) => onEditPageCrop(page)}
+          onEditFilter={(page) => onEditPageCrop(page)}
+          onEditRetouch={(page) => setRetouchTargetPage(page)}
+          onOcr={(page) => setOcrTargetPage(page)}
+        />
       )}
 
       {/* Modals */}

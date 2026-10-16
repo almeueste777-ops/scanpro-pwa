@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Zap, ZapOff, RefreshCw, Image as ImageIcon, Check, X, Layers, Sparkles } from 'lucide-react';
+import { Zap, ZapOff, RefreshCw, Image as ImageIcon, Check, X, Layers, Sparkles, Camera } from 'lucide-react';
 import type { DocumentCorners } from '../db';
 import { detectDocumentCornersSync } from '../utils/imageProcessing';
 
@@ -19,6 +19,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [torchOn, setTorchOn] = useState(false);
@@ -28,6 +29,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const [batchImages, setBatchImages] = useState<string[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [shutterEffect, setShutterEffect] = useState(false);
+  const [focusRingPos, setFocusRingPos] = useState<{ x: number; y: number } | null>(null);
 
   // Live AI Document Detection & Auto-Snap state
   const [autoSnap, setAutoSnap] = useState(true);
@@ -37,7 +39,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const stableCountRef = useRef<number>(0);
   const isCapturingRef = useRef<boolean>(false);
 
-  // Initialize camera
+  // Initialize camera with UHD 4K & continuous autofocus constraints
   useEffect(() => {
     let currentStream: MediaStream | null = null;
 
@@ -51,8 +53,8 @@ export const CameraView: React.FC<CameraViewProps> = ({
         const constraints: MediaStreamConstraints = {
           video: {
             facingMode: { ideal: facingMode },
-            width: { ideal: 2560 },
-            height: { ideal: 1440 }
+            width: { ideal: 3840, min: 1920 },
+            height: { ideal: 2160, min: 1080 }
           },
           audio: false
         };
@@ -71,10 +73,26 @@ export const CameraView: React.FC<CameraViewProps> = ({
           if (capabilities.torch) {
             setHasTorch(true);
           }
+
+          // Enable continuous autofocus & autoexposure for sharp document scans
+          try {
+            const advancedConstraints: any = {};
+            if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+              advancedConstraints.focusMode = 'continuous';
+            }
+            if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+              advancedConstraints.exposureMode = 'continuous';
+            }
+            if (Object.keys(advancedConstraints).length > 0) {
+              await (track as any).applyConstraints({ advanced: [advancedConstraints] });
+            }
+          } catch (e) {
+            console.warn('Advanced autofocus constraints not supported:', e);
+          }
         }
       } catch (err: any) {
         console.error('Camera access error:', err);
-        setCameraError('Nu s-a putut accesa camera. Te rugăm să permiți accesul sau să încarci din galerie.');
+        setCameraError('Nu s-a putut accesa camera. Te rugăm să permiți accesul sau să folosești camera nativă / galeria.');
       }
     }
 
@@ -214,6 +232,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
         }
       } else {
         setDocDetected(false);
+        smoothedCornersRef.current = null;
         stableCountRef.current = 0;
         setStabilityProgress(0);
       }
@@ -244,8 +263,8 @@ export const CameraView: React.FC<CameraViewProps> = ({
     setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
   };
 
-  // Shutter / Capture Photo
-  const takePicture = () => {
+  // Shutter / Capture Photo with Hardware ImageCapture support
+  const takePicture = async () => {
     if (!videoRef.current || isCapturingRef.current) return;
     isCapturingRef.current = true;
 
@@ -259,24 +278,65 @@ export const CameraView: React.FC<CameraViewProps> = ({
       navigator.vibrate(60);
     }
 
-    const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1920;
-    canvas.height = video.videoHeight || 1080;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      isCapturingRef.current = false;
-      return;
+    let dataUrl = '';
+    const track = stream?.getVideoTracks()[0];
+
+    // Priority 1: High-Resolution Hardware Still Photo (ImageCapture API)
+    if (track && (window as any).ImageCapture) {
+      try {
+        const imageCapture = new (window as any).ImageCapture(track);
+        const blob = await imageCapture.takePhoto();
+        dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (err) {
+        console.warn('ImageCapture fallback to video canvas:', err);
+      }
     }
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    // Priority 2: Full video frame capture at maximum sensor canvas resolution
+    if (!dataUrl) {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 2560;
+      canvas.height = video.videoHeight || 1440;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        isCapturingRef.current = false;
+        return;
+      }
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      dataUrl = canvas.toDataURL('image/jpeg', 0.98);
+    }
+
+    const cornersToUse = docDetected ? smoothedCornersRef.current || undefined : undefined;
 
     if (batchMode) {
       setBatchImages((prev) => [...prev, dataUrl]);
     } else {
-      onCapture(dataUrl, smoothedCornersRef.current || undefined);
+      onCapture(dataUrl, cornersToUse);
     }
+  };
+
+  // Handle Native HD Camera file capture (12MP-48MP full hardware sensor)
+  const handleNativeCameraFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      if (event.target?.result) {
+        const url = event.target.result as string;
+        if (batchMode) {
+          setBatchImages((prev) => [...prev, url]);
+        } else {
+          onCapture(url);
+        }
+      }
+    };
+    reader.readAsDataURL(files[0]);
   };
 
   // Handle Gallery file selection
@@ -314,6 +374,29 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const handleFinishBatch = () => {
     if (batchImages.length > 0 && onBatchComplete) {
       onBatchComplete(batchImages);
+    }
+  };
+
+  // Tap-to-focus on camera viewfinder
+  const handleViewportTap = async (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setFocusRingPos({ x, y });
+    setTimeout(() => setFocusRingPos(null), 1200);
+
+    const track = stream?.getVideoTracks()[0];
+    if (track) {
+      try {
+        const caps = (track.getCapabilities ? track.getCapabilities() : {}) as any;
+        if (caps.focusMode && caps.focusMode.includes('continuous')) {
+          await (track as any).applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          });
+        }
+      } catch (err) {
+        // ignore
+      }
     }
   };
 
@@ -389,17 +472,29 @@ export const CameraView: React.FC<CameraViewProps> = ({
       </div>
 
       {/* Video Viewport & Live AI Document Overlay */}
-      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+      <div
+        onClick={handleViewportTap}
+        className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden cursor-crosshair"
+      >
         {cameraError ? (
           <div className="p-6 text-center max-w-sm mx-auto glass-card rounded-3xl">
             <p className="text-rose-400 mb-4 text-sm font-medium">{cameraError}</p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-extrabold shadow-lg text-sm inline-flex items-center gap-2"
-            >
-              <ImageIcon className="w-4 h-4" />
-              Alege din Galerie
-            </button>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={() => nativeCameraInputRef.current?.click()}
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-extrabold shadow-lg text-sm inline-flex items-center justify-center gap-2"
+              >
+                <Camera className="w-4 h-4" />
+                Deschide Camera Nativă HD
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs inline-flex items-center justify-center gap-2"
+              >
+                <ImageIcon className="w-4 h-4" />
+                Alege din Galerie
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -415,6 +510,18 @@ export const CameraView: React.FC<CameraViewProps> = ({
               ref={overlayCanvasRef}
               className="absolute inset-0 w-full h-full pointer-events-none z-10"
             />
+
+            {/* Tap-to-Focus Reticle */}
+            {focusRingPos && (
+              <div
+                style={{
+                  left: `${focusRingPos.x}px`,
+                  top: `${focusRingPos.y}px`,
+                  transform: 'translate(-50%, -50%)'
+                }}
+                className="absolute w-16 h-16 border-2 border-emerald-400 rounded-lg pointer-events-none z-30 animate-ping duration-700"
+              />
+            )}
           </>
         )}
 
@@ -443,7 +550,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
                   ? autoSnap && stabilityProgress > 15
                     ? `Document încadrat • Ține nemișcat (${stabilityProgress}%)`
                     : 'Document detectat automat — Apasă sau ține nemișcat'
-                  : 'Îndreaptă camera spre foaie (va fi încadrată automat)'}
+                  : 'Atinge ecranul pentru focalizare • Îndreaptă spre foaie'}
               </span>
             </div>
           </div>
@@ -453,8 +560,8 @@ export const CameraView: React.FC<CameraViewProps> = ({
       {/* Bottom Controls Bar */}
       <div className="pb-safe bg-gradient-to-t from-black via-black/85 to-transparent z-20">
         <div className="max-w-xl mx-auto w-full px-6 pt-3 pb-6 flex items-center justify-between">
-          {/* Gallery Button */}
-          <div className="w-16 flex justify-start">
+          {/* Gallery & Native HD Camera Buttons */}
+          <div className="flex items-center gap-2">
             <input
               type="file"
               ref={fileInputRef}
@@ -463,12 +570,27 @@ export const CameraView: React.FC<CameraViewProps> = ({
               multiple
               className="hidden"
             />
+            <input
+              type="file"
+              ref={nativeCameraInputRef}
+              onChange={handleNativeCameraFile}
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+            />
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-3.5 rounded-2xl bg-slate-900/85 border border-slate-700/70 text-slate-200 hover:text-white hover:bg-slate-800 transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg"
               title="Importă din galerie"
             >
-              <ImageIcon className="w-6 h-6" />
+              <ImageIcon className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => nativeCameraInputRef.current?.click()}
+              className="p-3.5 rounded-2xl bg-slate-900/85 border border-emerald-500/40 text-emerald-400 hover:text-white hover:bg-emerald-950 transition active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg"
+              title="Cameră Nativă HD (12MP - 48MP Senzor Complet)"
+            >
+              <Camera className="w-5 h-5" />
             </button>
           </div>
 

@@ -8,7 +8,9 @@ import {
   FileText,
   Sun,
   Eye,
-  Plus
+  Plus,
+  ZoomIn,
+  ZoomOut
 } from 'lucide-react';
 import type { FilterType } from '../db';
 import { applyFilter, rotateCanvas, createThumbnail } from '../utils/imageProcessing';
@@ -38,27 +40,27 @@ interface FilterOption {
 const FILTER_OPTIONS: FilterOption[] = [
   {
     type: 'magic',
-    label: 'Magic Color',
+    label: 'Magic Color HD',
     icon: <Sparkles className="w-4 h-4 text-emerald-400" />,
     description: 'Fundal alb curat, text intens și culori vii'
   },
   {
     type: 'bw',
-    label: 'Alb & Negru',
+    label: 'Text Ultra-Clar',
     icon: <FileText className="w-4 h-4 text-blue-400" />,
-    description: 'Document ultra-clar, elimină umbrele'
+    description: 'Binarizare adaptivă laser-sharp pentru text mărunt'
+  },
+  {
+    type: 'sharp',
+    label: 'Claritate HD',
+    icon: <Sun className="w-4 h-4 text-amber-400" />,
+    description: 'Păstrează detalii fine, scris de mână și ștampile'
   },
   {
     type: 'grayscale',
     label: 'Tonuri Gri',
     icon: <span className="text-sm font-bold text-slate-400">G</span>,
     description: 'Nuanțe uniforme de gri'
-  },
-  {
-    type: 'sharp',
-    label: 'Claritate',
-    icon: <Sun className="w-4 h-4 text-amber-400" />,
-    description: 'Accentuează scrisul de mână și creionul'
   },
   {
     type: 'original',
@@ -80,6 +82,16 @@ export const FilterView: React.FC<FilterViewProps> = ({
   const [rotation, setRotation] = useState<number>(0);
   const [showSliders, setShowSliders] = useState<boolean>(false);
   const [comparingOriginal, setComparingOriginal] = useState<boolean>(false);
+
+  // Interactive Zoom & Pan States
+  const [scale, setScale] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const initialPinchDistRef = useRef<number | null>(null);
+  const initialScaleRef = useRef<number>(1);
+  const lastTapRef = useRef<number>(0);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const processedCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -113,8 +125,8 @@ export const FilterView: React.FC<FilterViewProps> = ({
   const handleSave = (continueAdding = false) => {
     if (!processedCanvasRef.current) return;
     const canvas = processedCanvasRef.current;
-    const processedImage = canvas.toDataURL('image/jpeg', 0.94);
-    const thumbnail = createThumbnail(canvas, 320);
+    const processedImage = canvas.toDataURL('image/jpeg', 0.96);
+    const thumbnail = createThumbnail(canvas, 420);
 
     onSavePage(
       processedImage,
@@ -130,6 +142,112 @@ export const FilterView: React.FC<FilterViewProps> = ({
   const handleRotate = () => {
     setRotation((prev) => (prev + 90) % 360);
     if (navigator.vibrate) navigator.vibrate(25);
+  };
+
+  const handleZoomIn = () => {
+    setScale((prev) => Math.min(4, Number((prev + 0.5).toFixed(2))));
+  };
+
+  const handleZoomOut = () => {
+    setScale((prev) => {
+      const next = Math.max(1, Number((prev - 0.5).toFixed(2)));
+      if (next === 1) setPanOffset({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  const handleResetZoom = () => {
+    setScale(1);
+    setPanOffset({ x: 0, y: 0 });
+  };
+
+  // Double tap to toggle zoom
+  const handleDoubleTap = (clientX: number, clientY: number) => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      if (scale > 1) {
+        handleResetZoom();
+      } else {
+        setScale(2.5);
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const offsetX = (clientX - (rect.left + rect.width / 2)) * -1.2;
+          const offsetY = (clientY - (rect.top + rect.height / 2)) * -1.2;
+          setPanOffset({ x: offsetX, y: offsetY });
+        }
+      }
+    }
+    lastTapRef.current = now;
+  };
+
+  // Wheel zoom
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.25 : -0.25;
+    setScale((prev) => {
+      const next = Math.min(4, Math.max(1, Number((prev + delta).toFixed(2))));
+      if (next === 1) setPanOffset({ x: 0, y: 0 });
+      return next;
+    });
+  };
+
+  // Dragging / Panning
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (scale <= 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || scale <= 1) return;
+    setPanOffset({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Touch handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      const p1 = e.touches[0];
+      const p2 = e.touches[1];
+      initialPinchDistRef.current = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+      initialScaleRef.current = scale;
+    } else if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      handleDoubleTap(touch.clientX, touch.clientY);
+      if (scale > 1) {
+        setIsDragging(true);
+        setDragStart({ x: touch.clientX - panOffset.x, y: touch.clientY - panOffset.y });
+      }
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && initialPinchDistRef.current) {
+      const p1 = e.touches[0];
+      const p2 = e.touches[1];
+      const dist = Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+      const ratio = dist / initialPinchDistRef.current;
+      const newScale = Math.min(4, Math.max(1, Number((initialScaleRef.current * ratio).toFixed(2))));
+      setScale(newScale);
+      if (newScale === 1) setPanOffset({ x: 0, y: 0 });
+    } else if (e.touches.length === 1 && isDragging && scale > 1) {
+      const touch = e.touches[0];
+      setPanOffset({
+        x: touch.clientX - dragStart.x,
+        y: touch.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    initialPinchDistRef.current = null;
+    setIsDragging(false);
   };
 
   return (
@@ -180,16 +298,33 @@ export const FilterView: React.FC<FilterViewProps> = ({
         </div>
       </div>
 
-      {/* Main Preview */}
-      <div className="relative flex-1 min-h-0 w-full flex items-center justify-center p-3 sm:p-6 overflow-hidden">
-        <div className="relative max-w-full max-h-full flex items-center justify-center shadow-2xl rounded-xl overflow-hidden border border-slate-800/90 bg-slate-950/60">
+      {/* Main Preview Container with Interactive Zoom & Pan */}
+      <div
+        ref={containerRef}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="relative flex-1 min-h-0 w-full flex items-center justify-center p-3 sm:p-6 overflow-hidden touch-none"
+      >
+        <div
+          style={{
+            transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${scale})`,
+            transformOrigin: 'center center',
+            transition: isDragging ? 'none' : 'transform 0.15s ease-out'
+          }}
+          className="relative max-w-full max-h-full flex items-center justify-center shadow-2xl rounded-xl overflow-hidden border border-slate-800/90 bg-slate-950/60 will-change-transform"
+        >
           <canvas
             ref={previewCanvasRef}
-            className="max-w-full max-h-[58dvh] sm:max-h-[66dvh] w-auto h-auto object-contain block mx-auto rounded-lg"
+            className="max-w-full max-h-[58dvh] sm:max-h-[66dvh] w-auto h-auto object-contain block mx-auto rounded-lg pointer-events-none"
           />
 
           {/* Before / After Hold-to-Compare Pill */}
-          {currentFilter !== 'original' && (
+          {currentFilter !== 'original' && scale === 1 && (
             <button
               onMouseDown={() => setComparingOriginal(true)}
               onMouseUp={() => setComparingOriginal(false)}
@@ -206,6 +341,33 @@ export const FilterView: React.FC<FilterViewProps> = ({
               <span>{comparingOriginal ? 'POZA BRUTĂ (ÎNAINTE)' : 'Ține apăsat: Înainte/După'}</span>
             </button>
           )}
+        </div>
+
+        {/* Floating Zoom Controls Widget */}
+        <div className="absolute top-4 right-4 z-30 flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 p-1 rounded-2xl shadow-xl backdrop-blur-md">
+          <button
+            onClick={handleZoomOut}
+            disabled={scale <= 1}
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white disabled:opacity-30 hover:bg-slate-800 transition"
+            title="Micșorează"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleResetZoom}
+            className="px-2 py-0.5 rounded-lg text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition"
+            title="Resetează zoom"
+          >
+            {Math.round(scale * 100)}%
+          </button>
+          <button
+            onClick={handleZoomIn}
+            disabled={scale >= 4}
+            className="p-1.5 rounded-xl text-slate-300 hover:text-white disabled:opacity-30 hover:bg-slate-800 transition"
+            title="Mărește zoom"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Floating Fine-Tuning Sliders Overlay */}
