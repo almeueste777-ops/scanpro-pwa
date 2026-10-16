@@ -17,13 +17,13 @@ import {
   getSignatures,
   deleteSignatureItem
 } from '../db';
-import { SignatureModal } from './SignatureModal';
+import { SignatureModal, type CreationMode } from './SignatureModal';
 import { APP_VERSION } from '../utils/version';
 
 interface SignatureStudioViewProps {
   documents: DocumentItem[];
   onBack: () => void;
-  onOpenDocumentToSign: (docId: string) => void;
+  onOpenDocumentToSign: (docId: string, initialSignatureItem?: SignatureItem) => void;
 }
 
 export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
@@ -33,13 +33,20 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'signature' | 'stamp'>('signature');
   const [items, setItems] = useState<SignatureItem[]>([]);
+  const [sigCount, setSigCount] = useState<number>(0);
+  const [stampCount, setStampCount] = useState<number>(0);
+
   const [showModal, setShowModal] = useState(false);
   const [modalDefaultType, setModalDefaultType] = useState<'signature' | 'stamp'>('signature');
+  const [modalInitialMode, setModalInitialMode] = useState<CreationMode>('draw');
   const [selectedItemToUse, setSelectedItemToUse] = useState<SignatureItem | null>(null);
 
   const loadData = async () => {
-    const list = await getSignatures(activeTab);
-    setItems(list);
+    const allSigs = await getSignatures('signature');
+    const allStamps = await getSignatures('stamp');
+    setSigCount(allSigs.length);
+    setStampCount(allStamps.length);
+    setItems(activeTab === 'signature' ? allSigs : allStamps);
   };
 
   useEffect(() => {
@@ -54,8 +61,9 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
     }
   };
 
-  const handleOpenCreator = (type: 'signature' | 'stamp') => {
+  const handleOpenCreator = (type: 'signature' | 'stamp', mode: CreationMode = 'draw') => {
     setModalDefaultType(type);
+    setModalInitialMode(mode);
     setShowModal(true);
   };
 
@@ -89,7 +97,7 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
           </div>
 
           <button
-            onClick={() => handleOpenCreator(activeTab)}
+            onClick={() => handleOpenCreator(activeTab, activeTab === 'stamp' ? 'template' : 'draw')}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs shadow-lg shadow-blue-500/20 active:scale-95 transition"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
@@ -108,7 +116,7 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
             }`}
           >
             <PenTool className="w-3.5 h-3.5" />
-            <span>Semnături ({activeTab === 'signature' ? items.length : '...'})</span>
+            <span>Semnături ({sigCount})</span>
           </button>
 
           <button
@@ -120,18 +128,18 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
             }`}
           >
             <Stamp className="w-3.5 h-3.5" />
-            <span>Ștampile ({activeTab === 'stamp' ? items.length : '...'})</span>
+            <span>Ștampile ({stampCount})</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="p-4 space-y-4 flex-1">
-        {/* Creation Modes Grid */}
+        {/* Creation Modes Grid — each card opens that exact creation mode directly! */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <div
-            onClick={() => handleOpenCreator(activeTab)}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg"
+            onClick={() => handleOpenCreator(activeTab, 'draw')}
+            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-blue-500/15 text-blue-400 group-hover:scale-110 transition">
               <PenTool className="w-5 h-5" />
@@ -141,8 +149,8 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
           </div>
 
           <div
-            onClick={() => handleOpenCreator(activeTab)}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg"
+            onClick={() => handleOpenCreator(activeTab, 'scan')}
+            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 group-hover:scale-110 transition">
               <Camera className="w-5 h-5" />
@@ -152,8 +160,8 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
           </div>
 
           <div
-            onClick={() => handleOpenCreator(activeTab)}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-purple-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg"
+            onClick={() => handleOpenCreator(activeTab, 'import')}
+            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-purple-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-purple-500/15 text-purple-400 group-hover:scale-110 transition">
               <ImageIcon className="w-5 h-5" />
@@ -163,8 +171,8 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
           </div>
 
           <div
-            onClick={() => handleOpenCreator('stamp')}
-            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-rose-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg"
+            onClick={() => handleOpenCreator('stamp', 'template')}
+            className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 hover:border-rose-500/50 cursor-pointer transition flex flex-col items-center text-center gap-1.5 group shadow-lg active:scale-95"
           >
             <div className="p-2.5 rounded-xl bg-rose-500/15 text-rose-400 group-hover:scale-110 transition">
               <Sparkles className="w-5 h-5" />
@@ -182,24 +190,30 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
             </span>
             <span className="text-[11px] text-slate-400 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              100% Privat pe telefon
+              Apasă pe un element pentru a-l aplica pe document
             </span>
           </div>
 
           {items.length === 0 ? (
             <div className="p-10 text-center bg-slate-900/60 rounded-2xl border border-slate-800 border-dashed max-w-md mx-auto">
               <div className="w-14 h-14 rounded-2xl bg-slate-800/80 flex items-center justify-center mx-auto mb-3 text-slate-400">
-                {activeTab === 'signature' ? <PenTool className="w-7 h-7" /> : <Stamp className="w-7 h-7" />}
+                {activeTab === 'signature' ? (
+                  <PenTool className="w-7 h-7" />
+                ) : (
+                  <Stamp className="w-7 h-7" />
+                )}
               </div>
               <h3 className="text-sm font-bold text-white mb-1">
                 Nu ai nicio {activeTab === 'signature' ? 'semnătură' : 'ștampilă'} salvată
               </h3>
               <p className="text-xs text-slate-400 mb-4">
-                Apasă pe butonul de mai sus pentru a desena, scana sau genera prima ta{' '}
+                Apasă pe una dintre opțiunile de mai sus pentru a desena, scana sau genera prima ta{' '}
                 {activeTab === 'signature' ? 'semnătură' : 'ștampilă'}!
               </p>
               <button
-                onClick={() => handleOpenCreator(activeTab)}
+                onClick={() =>
+                  handleOpenCreator(activeTab, activeTab === 'stamp' ? 'template' : 'draw')
+                }
                 className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition active:scale-95"
               >
                 + Creează Acum
@@ -273,7 +287,7 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-300">
-              Alege documentul pe care vrei să aplici această{' '}
+              Alege documentul pe care vrei să aplici direct această{' '}
               {selectedItemToUse.type === 'signature' ? 'semnătură' : 'ștampilă'}:
             </p>
 
@@ -288,8 +302,9 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
                     key={doc.id}
                     onClick={() => {
                       const docId = doc.id;
+                      const itemToApply = selectedItemToUse;
                       setSelectedItemToUse(null);
-                      onOpenDocumentToSign(docId);
+                      onOpenDocumentToSign(docId, itemToApply);
                     }}
                     className="w-full p-3 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700/80 text-left flex items-center justify-between transition group"
                   >
@@ -304,7 +319,7 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-emerald-400">Semnează →</span>
+                    <span className="text-xs font-bold text-emerald-400">Aplică →</span>
                   </button>
                 ))}
               </div>
@@ -317,9 +332,11 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
       {showModal && (
         <SignatureModal
           defaultType={modalDefaultType}
-          onSelect={async () => {
+          initialMode={modalInitialMode}
+          onSelect={async (savedItem) => {
             setShowModal(false);
-            loadData();
+            setActiveTab(savedItem.type);
+            await loadData();
           }}
           onClose={() => setShowModal(false)}
         />

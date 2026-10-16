@@ -5,7 +5,8 @@ import {
   addPageToDocument,
   type DocumentItem,
   type DocumentCorners,
-  type FilterType
+  type FilterType,
+  type SignatureItem
 } from './db';
 import {
   loadImage,
@@ -38,6 +39,8 @@ export const App: React.FC = () => {
   const [currentRawImage, setCurrentRawImage] = useState<string | null>(null);
   const [currentWarpedCanvas, setCurrentWarpedCanvas] = useState<HTMLCanvasElement | null>(null);
   const [currentCorners, setCurrentCorners] = useState<DocumentCorners | null>(null);
+  const [editingPageId, setEditingPageId] = useState<string | null>(null);
+  const [pendingSignatureItem, setPendingSignatureItem] = useState<SignatureItem | null>(null);
   const [isAutoProcessing, setIsAutoProcessing] = useState<boolean>(false);
 
   // Batch queue for scanning multiple pages
@@ -154,6 +157,7 @@ export const App: React.FC = () => {
   // Start new scan from Home
   const handleStartNewScanCamera = () => {
     setTargetDocId(null);
+    setEditingPageId(null);
     setBatchQueue([]);
     setActiveView('camera');
   };
@@ -163,6 +167,7 @@ export const App: React.FC = () => {
     const fileList = Array.from(files);
     if (fileList.length === 0) return;
 
+    setEditingPageId(null);
     if (existingDocId) {
       setTargetDocId(existingDocId);
     } else {
@@ -190,18 +195,21 @@ export const App: React.FC = () => {
   // Add page to an existing document via Camera
   const handleAddPageCamera = (docId: string) => {
     setTargetDocId(docId);
+    setEditingPageId(null);
     setBatchQueue([]);
     setActiveView('camera');
   };
 
   // Camera single image captured -> Automatically frame & enhance!
   const handleCameraCapture = (imageDataUrl: string, detectedCorners?: DocumentCorners) => {
+    setEditingPageId(null);
     runAutoScanPipeline(imageDataUrl, detectedCorners);
   };
 
   // Camera batch images captured -> Automatically frame & enhance first image
   const handleCameraBatchComplete = (images: string[]) => {
     if (images.length === 0) return;
+    setEditingPageId(null);
     setBatchQueue(images.slice(1));
     runAutoScanPipeline(images[0]);
   };
@@ -213,7 +221,7 @@ export const App: React.FC = () => {
     setActiveView('filter');
   };
 
-  // Filter confirmed -> save page to Dexie
+  // Filter confirmed -> save page to Dexie (or update existing page if editingPageId is set!)
   const handleSavePage = async (
     processedImage: string,
     thumbnail: string,
@@ -224,6 +232,36 @@ export const App: React.FC = () => {
     continueAdding = false
   ) => {
     if (!currentRawImage) return;
+
+    if (editingPageId && targetDocId) {
+      // Update existing page in place instead of creating a duplicate!
+      const existingPage = await db.pages.get(editingPageId);
+      await db.pages.update(editingPageId, {
+        processedImage,
+        thumbnail,
+        width: currentWarpedCanvas?.width || 1200,
+        height: currentWarpedCanvas?.height || 1600,
+        corners: currentCorners || undefined,
+        filter,
+        brightness,
+        contrast,
+        rotation
+      });
+
+      if (existingPage && existingPage.pageNumber === 1) {
+        await db.documents.update(targetDocId, {
+          thumbnail,
+          updatedAt: Date.now()
+        });
+      } else {
+        await db.documents.update(targetDocId, { updatedAt: Date.now() });
+      }
+
+      setEditingPageId(null);
+      await refreshDocuments();
+      setActiveView('detail');
+      return;
+    }
 
     let docId = targetDocId;
     if (!docId) {
@@ -260,6 +298,7 @@ export const App: React.FC = () => {
 
   // Cancel crop
   const handleCancelCrop = () => {
+    setEditingPageId(null);
     if (batchQueue.length > 0) {
       const next = batchQueue[0];
       setBatchQueue((prev) => prev.slice(1));
@@ -289,6 +328,7 @@ export const App: React.FC = () => {
           documents={documents}
           onOpenDocument={(id) => {
             setTargetDocId(id);
+            setPendingSignatureItem(null);
             setActiveView('detail');
           }}
           onNewScanCamera={handleStartNewScanCamera}
@@ -338,14 +378,18 @@ export const App: React.FC = () => {
       {activeView === 'detail' && targetDocId && (
         <DocumentDetail
           documentId={targetDocId}
+          initialSignatureToPlace={pendingSignatureItem}
+          onClearInitialSignature={() => setPendingSignatureItem(null)}
           onBack={() => {
             setTargetDocId(null);
+            setPendingSignatureItem(null);
             setActiveView('home');
             refreshDocuments();
           }}
           onAddPageCamera={(docId) => handleAddPageCamera(docId)}
           onAddPageGallery={(docId, files) => handleStartGalleryImport(files, docId)}
           onEditPageCrop={(page) => {
+            setEditingPageId(page.id);
             setCurrentRawImage(page.originalImage);
             setCurrentCorners(page.corners || null);
             setActiveView('crop');
@@ -358,8 +402,9 @@ export const App: React.FC = () => {
         <SignatureStudioView
           documents={documents}
           onBack={() => setActiveView('home')}
-          onOpenDocumentToSign={(docId) => {
+          onOpenDocumentToSign={(docId, sigItem) => {
             setTargetDocId(docId);
+            setPendingSignatureItem(sigItem || null);
             setActiveView('detail');
           }}
         />

@@ -26,18 +26,20 @@ interface SignatureModalProps {
   onSelect: (item: SignatureItem) => void;
   onClose: () => void;
   defaultType?: 'signature' | 'stamp';
+  initialMode?: CreationMode;
 }
 
-type CreationMode = 'list' | 'draw' | 'scan' | 'import' | 'template';
+export type CreationMode = 'list' | 'draw' | 'scan' | 'import' | 'template';
 
 export const SignatureModal: React.FC<SignatureModalProps> = ({
   onSelect,
   onClose,
-  defaultType = 'signature'
+  defaultType = 'signature',
+  initialMode = 'list'
 }) => {
   const [activeTab, setActiveTab] = useState<'signature' | 'stamp'>(defaultType);
   const [items, setItems] = useState<SignatureItem[]>([]);
-  const [mode, setMode] = useState<CreationMode>('list');
+  const [mode, setMode] = useState<CreationMode>(initialMode === 'import' ? 'list' : initialMode);
   const [itemName, setItemName] = useState('');
 
   // Drawing state
@@ -47,11 +49,14 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
   const [penWidth, setPenWidth] = useState(3.5);
   const [hasDrawn, setHasDrawn] = useState(false);
 
-  // Scan state
+  // Scan / Import state
   const videoRef = useRef<HTMLVideoElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [rawScannedImage, setRawScannedImage] = useState<string | null>(null);
   const [scannedPreview, setScannedPreview] = useState<string | null>(null);
-  const [selectedTint, setSelectedTint] = useState<string | null>('#1d4ed8');
+  const [selectedTint, setSelectedTint] = useState<string | null>(
+    defaultType === 'signature' ? '#1d4ed8' : null
+  );
 
   // Stamp template state
   const [stampType, setStampType] = useState<'rect' | 'circle' | 'badge'>('rect');
@@ -75,7 +80,35 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     loadItems();
   }, [activeTab]);
 
-  // Clean camera stream on unmount or mode change
+  // If opened with initialMode === 'import', trigger file input automatically
+  useEffect(() => {
+    if (initialMode === 'import') {
+      setTimeout(() => fileInputRef.current?.click(), 100);
+    } else if (initialMode === 'scan') {
+      startCamera();
+    }
+  }, [initialMode]);
+
+  // Bind cameraStream to video element whenever video mounts or stream changes
+  useEffect(() => {
+    if (mode === 'scan' && !scannedPreview && videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [mode, scannedPreview, cameraStream]);
+
+  // Re-extract transparent ink whenever rawScannedImage or selectedTint changes!
+  useEffect(() => {
+    if (!rawScannedImage) return;
+    let active = true;
+    extractTransparentInk(rawScannedImage, selectedTint).then((transparentData) => {
+      if (active) setScannedPreview(transparentData);
+    });
+    return () => {
+      active = false;
+    };
+  }, [rawScannedImage, selectedTint]);
+
+  // Clean camera stream on unmount
   useEffect(() => {
     return () => {
       if (cameraStream) {
@@ -174,6 +207,9 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
   // 2. SCANNING VIA CAMERA
   const startCamera = async () => {
     try {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((t) => t.stop());
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: 'environment' } },
         audio: false
@@ -202,10 +238,8 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
       setCameraStream(null);
     }
 
-    // Extract transparent ink
     const rawDataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    const transparentData = await extractTransparentInk(rawDataUrl, selectedTint);
-    setScannedPreview(transparentData);
+    setRawScannedImage(rawDataUrl);
   };
 
   const handleSaveScanned = async () => {
@@ -227,7 +261,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     onSelect(saved);
   };
 
-  // 3. IMPORT FROM FILE
+  // 3. IMPORT FROM FILE (opens preview with ink color tint selector!)
   const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -235,19 +269,10 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     const reader = new FileReader();
     reader.onload = async (evt) => {
       if (evt.target?.result) {
-        const transparentData = await extractTransparentInk(
-          evt.target.result as string,
-          activeTab === 'signature' ? '#1d4ed8' : null
-        );
-        const saved = await saveSignatureItem({
-          type: activeTab,
-          name: file.name.replace(/\.[^/.]+$/, ''),
-          imageData: transparentData,
-          color: activeTab === 'signature' ? '#1d4ed8' : '#dc2626'
-        });
-        await loadItems();
-        setMode('list');
-        onSelect(saved);
+        setItemName(file.name.replace(/\.[^/.]+$/, ''));
+        setSelectedTint(activeTab === 'signature' ? '#1d4ed8' : null);
+        setRawScannedImage(evt.target.result as string);
+        setMode('scan');
       }
     };
     reader.readAsDataURL(file);
@@ -354,6 +379,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                 <button
                   onClick={() => {
                     setItemName('');
+                    setRawScannedImage(null);
                     setScannedPreview(null);
                     setMode('scan');
                     startCamera();
@@ -632,6 +658,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
+                        setRawScannedImage(null);
                         setScannedPreview(null);
                         startCamera();
                       }}

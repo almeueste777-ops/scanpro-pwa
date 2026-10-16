@@ -25,20 +25,7 @@ export async function generatePdfBlob(
   const qualityJpeg =
     options.quality === 'high' ? 0.92 : options.quality === 'medium' ? 0.78 : 0.58;
 
-  const orientation = 'portrait';
-  const pdf = new jsPDF({
-    orientation,
-    unit: 'mm',
-    format: options.pageSize === 'letter' ? 'letter' : 'a4'
-  });
-
-  // Set PDF metadata
-  pdf.setProperties({
-    title: docItem.title || options.fileName,
-    creator: 'ScanPro PWA v2.1',
-    subject: `Document scanat (${pages.length} pagini)`
-  });
-
+  let pdf: jsPDF | null = null;
   const total = pages.length;
 
   for (let i = 0; i < total; i++) {
@@ -94,10 +81,21 @@ export async function generatePdfBlob(
       }
     }
 
-    if (i > 0) {
-      pdf.addPage([pageWidthMm, pageHeightMm], imgRatio > 1 ? 'landscape' : 'portrait');
+    const pageOrientation = pageWidthMm > pageHeightMm ? 'landscape' : 'portrait';
+
+    if (!pdf) {
+      pdf = new jsPDF({
+        orientation: pageOrientation,
+        unit: 'mm',
+        format: [pageWidthMm, pageHeightMm]
+      });
+      pdf.setProperties({
+        title: docItem.title || options.fileName,
+        creator: 'ScanPro PWA v2.2',
+        subject: `Document scanat (${pages.length} pagini)`
+      });
     } else {
-      pdf.setPage(1);
+      pdf.addPage([pageWidthMm, pageHeightMm], pageOrientation);
     }
 
     const margin = options.marginMm;
@@ -140,7 +138,7 @@ export async function generatePdfBlob(
     }
   }
 
-  return pdf.output('blob');
+  return pdf!.output('blob');
 }
 
 /**

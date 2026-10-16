@@ -77,44 +77,75 @@ export function trimTransparentCanvas(canvas: HTMLCanvasElement): HTMLCanvasElem
 }
 
 /**
- * Converts a scanned or uploaded signature on paper into a transparent PNG
- * with intelligent background subtraction and optional ink tinting.
+ * Converts a scanned or uploaded signature/stamp on paper into a transparent PNG
+ * using local block background illumination estimation (shadow-proof) and optional ink tinting.
  */
 export async function extractTransparentInk(
   imageSrc: string,
-  tintColor: string | null = null, // e.g. '#1d4ed8' (blue pen), '#111827' (black), '#dc2626' (red)
+  tintColor: string | null = null, // e.g. '#1d4ed8' (blue pen), '#090d16' (black), '#dc2626' (red)
   thresholdMultiplier = 1.0
 ): Promise<string> {
   const img = await loadImage(imageSrc);
+  const maxDim = 1000;
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const w = Math.max(20, Math.round(img.width * scale));
+  const h = Math.max(20, Math.round(img.height * scale));
+
   const canvas = document.createElement('canvas');
-  canvas.width = img.width;
-  canvas.height = img.height;
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(img, 0, 0);
+  ctx.drawImage(img, 0, 0, w, h);
 
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
-  const len = data.length;
 
-  // 1. Calculate average luminance of corners (estimated paper color)
-  let bgLuminance = 240;
-  let sampleCount = 0;
-  let sampleSum = 0;
-  // Sample 20 random perimeter points
-  for (let i = 0; i < 20; i++) {
-    const rx = Math.floor(Math.random() * img.width);
-    const ry = i % 2 === 0 ? 5 : img.height - 5;
-    const pIdx = (ry * img.width + rx) * 4;
-    const lum = 0.299 * data[pIdx] + 0.587 * data[pIdx + 1] + 0.114 * data[pIdx + 2];
-    sampleSum += lum;
-    sampleCount++;
+  // Estimate local paper brightness in 16x16 blocks (dilation + box blur)
+  const blockSize = 16;
+  const gw = Math.ceil(w / blockSize);
+  const gh = Math.ceil(h / blockSize);
+  const bgGrid = new Float32Array(gw * gh);
+
+  for (let gy = 0; gy < gh; gy++) {
+    const y0 = gy * blockSize;
+    const y1 = Math.min(h, y0 + blockSize);
+    for (let gx = 0; gx < gw; gx++) {
+      const x0 = gx * blockSize;
+      const x1 = Math.min(w, x0 + blockSize);
+      let maxLum = 120;
+      for (let y = y0; y < y1; y += 2) {
+        for (let x = x0; x < x1; x += 2) {
+          const idx = (y * w + x) << 2;
+          const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+          if (lum > maxLum) maxLum = lum;
+        }
+      }
+      bgGrid[gy * gw + gx] = maxLum;
+    }
   }
-  if (sampleCount > 0) {
-    bgLuminance = Math.min(255, Math.max(180, (sampleSum / sampleCount) * thresholdMultiplier));
+
+  // Smooth bgGrid with a 3x3 average filter
+  const smoothBg = new Float32Array(gw * gh);
+  for (let gy = 0; gy < gh; gy++) {
+    for (let gx = 0; gx < gw; gx++) {
+      let sum = 0,
+        cnt = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const ny = Math.min(gh - 1, Math.max(0, gy + dy));
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = Math.min(gw - 1, Math.max(0, gx + dx));
+          sum += bgGrid[ny * gw + nx];
+          cnt++;
+        }
+      }
+      smoothBg[gy * gw + gx] = (sum / cnt) * thresholdMultiplier;
+    }
   }
 
   // Parse tint RGB if provided
-  let tR = 0, tG = 0, tB = 0;
+  let tR = 0,
+    tG = 0,
+    tB = 0;
   if (tintColor && tintColor.startsWith('#')) {
     const hex = tintColor.replace('#', '');
     tR = parseInt(hex.substring(0, 2), 16) || 0;
@@ -122,27 +153,50 @@ export async function extractTransparentInk(
     tB = parseInt(hex.substring(4, 6), 16) || 0;
   }
 
-  for (let i = 0; i < len; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
+  // Ignore outer 3% border of camera frame to avoid dark table edges
+  const padX = Math.round(w * 0.03);
+  const padY = Math.round(h * 0.03);
 
-    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  for (let y = 0; y < h; y++) {
+    const gy = Math.min(gh - 1, Math.floor(y / blockSize));
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) << 2;
 
-    if (lum >= bgLuminance - 10) {
-      // Paper background -> 100% transparent
-      data[i + 3] = 0;
-    } else {
-      // Ink pixel: calculate alpha with smooth gradient falloff
-      const diff = bgLuminance - lum;
-      const alpha = Math.min(255, Math.max(0, Math.round((diff / 90) * 255)));
-      data[i + 3] = alpha;
+      if (x < padX || x >= w - padX || y < padY || y >= h - padY) {
+        data[i + 3] = 0;
+        continue;
+      }
 
-      if (tintColor) {
-        // Tint to selected realistic pen / stamp ink color
-        data[i] = tR;
-        data[i + 1] = tG;
-        data[i + 2] = tB;
+      const gx = Math.min(gw - 1, Math.floor(x / blockSize));
+      const localPaperLum = Math.max(100, smoothBg[gy * gw + gx]);
+
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+      // Normalized darkness relative to local paper background
+      const ratio = lum / localPaperLum;
+
+      if (ratio >= 0.84) {
+        // Paper background -> 100% transparent
+        data[i + 3] = 0;
+      } else {
+        // Ink stroke -> smooth alpha ramp
+        const inkStrength = Math.min(1, (0.84 - ratio) / 0.32);
+        const alpha = Math.round(inkStrength * 255);
+        data[i + 3] = alpha;
+
+        if (tintColor) {
+          data[i] = tR;
+          data[i + 1] = tG;
+          data[i + 2] = tB;
+        } else {
+          // Boost original ink contrast
+          data[i] = Math.max(0, Math.round(r * 0.75));
+          data[i + 1] = Math.max(0, Math.round(g * 0.75));
+          data[i + 2] = Math.max(0, Math.round(b * 0.75));
+        }
       }
     }
   }

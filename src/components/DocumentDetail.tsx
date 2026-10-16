@@ -22,7 +22,8 @@ import {
   deleteDocument,
   type DocumentItem,
   type DocumentPage,
-  type FilterType
+  type FilterType,
+  type SignatureItem
 } from '../db';
 import {
   loadImage,
@@ -38,6 +39,8 @@ import { PageRetouchModal } from './PageRetouchModal';
 
 interface DocumentDetailProps {
   documentId: string;
+  initialSignatureToPlace?: SignatureItem | null;
+  onClearInitialSignature?: () => void;
   onBack: () => void;
   onAddPageCamera: (docId: string) => void;
   onAddPageGallery: (docId: string, files: FileList) => void;
@@ -46,6 +49,8 @@ interface DocumentDetailProps {
 
 export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   documentId,
+  initialSignatureToPlace = null,
+  onClearInitialSignature,
   onBack,
   onAddPageCamera,
   onAddPageGallery,
@@ -59,7 +64,9 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const [ocrTargetPage, setOcrTargetPage] = useState<DocumentPage | null>(null);
   const [retouchTargetPage, setRetouchTargetPage] = useState<DocumentPage | null>(null);
   const [fullPreviewPage, setFullPreviewPage] = useState<DocumentPage | null>(null);
-  const [signViewPageIndex, setSignViewPageIndex] = useState<number | null>(null);
+  const [signViewPageIndex, setSignViewPageIndex] = useState<number | null>(
+    initialSignatureToPlace ? 0 : null
+  );
   const [isBatchFiltering, setIsBatchFiltering] = useState<boolean>(false);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -597,14 +604,19 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         />
       )}
 
-      {signViewPageIndex !== null && (
+      {signViewPageIndex !== null && pages.length > 0 && (
         <SignDocumentView
           document={doc}
           pages={pages}
           initialPageIndex={signViewPageIndex}
-          onClose={() => setSignViewPageIndex(null)}
+          initialSignatureItem={initialSignatureToPlace}
+          onClose={() => {
+            setSignViewPageIndex(null);
+            if (onClearInitialSignature) onClearInitialSignature();
+          }}
           onSaved={() => {
             setSignViewPageIndex(null);
+            if (onClearInitialSignature) onClearInitialSignature();
             loadData();
           }}
         />

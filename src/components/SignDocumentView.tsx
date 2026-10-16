@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -28,6 +28,7 @@ interface SignDocumentViewProps {
   document: DocumentItem;
   pages: DocumentPage[];
   initialPageIndex?: number;
+  initialSignatureItem?: SignatureItem | null;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -36,13 +37,14 @@ export const SignDocumentView: React.FC<SignDocumentViewProps> = ({
   document: docItem,
   pages,
   initialPageIndex = 0,
+  initialSignatureItem = null,
   onClose,
   onSaved
 }) => {
   const [currentPageIndex, setCurrentPageIndex] = useState(initialPageIndex);
   const [overlays, setOverlays] = useState<PlacedOverlay[]>([]);
   const [selectedOverlayId, setSelectedOverlayId] = useState<string | null>(null);
-  const [applyToAllPages, setApplyToAllPages] = useState<boolean>(true); // user wanted full document option!
+  const [applyToAllPages, setApplyToAllPages] = useState<boolean>(true);
   const [modalType, setModalType] = useState<'signature' | 'stamp' | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -72,12 +74,19 @@ export const SignDocumentView: React.FC<SignDocumentViewProps> = ({
       x: defaultX,
       y: defaultY,
       scale: defaultScale,
-      rotation: isSig ? 0 : -5 // realistic stamp has slight tilt
+      rotation: isSig ? 0 : -5
     };
 
     setOverlays((prev) => [...prev, newOverlay]);
     setSelectedOverlayId(newOverlay.id);
   };
+
+  // Automatically place initialSignatureItem if passed from SignatureStudioView
+  useEffect(() => {
+    if (initialSignatureItem && overlays.length === 0) {
+      handleSelectSignatureItem(initialSignatureItem);
+    }
+  }, [initialSignatureItem]);
 
   // Dragging logic
   const handlePointerDown = (id: string, e: React.TouchEvent | React.MouseEvent) => {
@@ -273,16 +282,16 @@ export const SignDocumentView: React.FC<SignDocumentViewProps> = ({
 
       {/* Main Document Canvas Viewport */}
       <div className="relative flex-1 w-full h-full flex items-center justify-center p-3 overflow-hidden bg-slate-950/70">
-        {/* Document Page Container */}
+        {/* Document Page Container (tightly wraps image for 1:1 normalized coordinates) */}
         <div
           ref={containerRef}
-          className="relative max-h-[64vh] max-w-full aspect-[3/4] shadow-2xl rounded-lg overflow-hidden border border-slate-700 bg-white"
+          className="relative inline-block shadow-2xl rounded-lg overflow-hidden border border-slate-700 bg-white"
         >
           {/* Base Page Image */}
           <img
             src={activePage.processedImage || activePage.originalImage}
             alt="Pagina document"
-            className="w-full h-full object-contain pointer-events-none select-none block"
+            className="max-h-[60vh] max-w-full w-auto h-auto pointer-events-none select-none block"
           />
 
           {/* Placed Signature / Stamp Overlays */}

@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v2.1.0';
-export const APP_BUILD_NAME = 'VIP Suite: ID Card A4, Carte 2-Pag, Radieră Smart & Filigran PDF';
+export const APP_VERSION = 'v2.2.0';
+export const APP_BUILD_NAME = 'Audit & Fix Complet: VIP Suite + Semnături 1:1';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload
