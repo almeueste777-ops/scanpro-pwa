@@ -138,6 +138,8 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         await db.pages.update(p.id, {
           processedImage: nextProcessed,
           thumbnail: nextThumb,
+          width: filtered.width,
+          height: filtered.height,
           filter: targetFilter
         });
 
@@ -172,11 +174,18 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
       await db.pages.update(page.id, {
         processedImage: nextProcessed,
         thumbnail: nextThumb,
+        width: rotated.width,
+        height: rotated.height,
         rotation: ((page.rotation || 0) + 90) % 360
       });
 
       if (page.pageNumber === 1) {
-        await db.documents.update(documentId, { thumbnail: nextThumb });
+        await db.documents.update(documentId, {
+          thumbnail: nextThumb,
+          updatedAt: Date.now()
+        });
+      } else {
+        await db.documents.update(documentId, { updatedAt: Date.now() });
       }
 
       loadData();
@@ -195,17 +204,30 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     await db.pages.update(pageA.id, { pageNumber: targetIndex + 1 });
     await db.pages.update(pageB.id, { pageNumber: index + 1 });
 
+    // If Page 1 changed position, update document cover thumbnail
+    if (index === 0 || targetIndex === 0) {
+      const newFirstPage = targetIndex === 0 ? pageA : pageB;
+      await db.documents.update(documentId, {
+        thumbnail: newFirstPage.thumbnail,
+        updatedAt: Date.now()
+      });
+    } else {
+      await db.documents.update(documentId, { updatedAt: Date.now() });
+    }
+
     loadData();
   };
 
-  // Delete page
+  // Delete page (or delete entire document if it was the last page)
   const handleDeletePage = async (pageId: string) => {
     if (!confirm('Ești sigur că vrei să ștergi această pagină?')) return;
+    if (pages.length <= 1) {
+      await deleteDocument(documentId);
+      onBack();
+      return;
+    }
     await deletePage(pageId);
     await loadData();
-    if (pages.length <= 1) {
-      onBack();
-    }
   };
 
   // Delete entire document

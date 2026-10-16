@@ -43,18 +43,26 @@ function parseRomanianDocumentEntities(rawText: string): ExtractedEntities {
 
   // 1. IBAN (Romanian 24-char RO.. or international)
   const ibanMatches =
-    upper.match(/\bRO\s*\d{2}\s*[A-Z]{4}(?:\s*[A-Z0-9]{4}){4}\b/g) || [];
+    upper.match(/\bRO[\s-]*\d{2}[\s-]*[A-Z0-9]{4}(?:[\s-]*[A-Z0-9]{4}){4}\b/g) || [];
   const ibans = Array.from(
-    new Set(ibanMatches.map((m) => m.replace(/\s+/g, '')))
+    new Set(
+      ibanMatches
+        .map((m) => m.replace(/[\s-]+/g, ''))
+        .filter((m) => m.length === 24)
+    )
   );
 
   // 2. CUI / CIF (e.g., RO12345678 or CUI: 12345678 or CIF 12345678)
-  const cuiRegex = /\b(?:C\.?U\.?I\.?|C\.?I\.?F\.?|COD\s*FISCAL)\s*[:.]?\s*(RO\s*\d{2,10}|\d{6,10})\b|\b(RO\d{6,10})\b/gi;
+  const cuiRegex =
+    /\b(?:C\.?U\.?I\.?|C\.?I\.?F\.?|COD\s*FISCAL)\s*[:.]?\s*(RO\s*\d{2,10}|\d{6,10})\b|\b(RO\d{6,10})\b/gi;
   const cuiSet = new Set<string>();
   let mCui: RegExpExecArray | null;
   while ((mCui = cuiRegex.exec(upper)) !== null) {
     const val = (mCui[1] || mCui[2] || '').replace(/\s+/g, '');
-    if (val) cuiSet.add(val);
+    // Do not confuse an IBAN prefix with a CUI
+    if (val && !ibans.some((iban) => iban.includes(val))) {
+      cuiSet.add(val);
+    }
   }
 
   // 3. Nr. Reg. Com. (e.g., J40/1234/2020 or F12/345/2019)
@@ -82,7 +90,7 @@ function parseRomanianDocumentEntities(rawText: string): ExtractedEntities {
     const s = mCi[1] || mCi[3];
     const n = mCi[2] || mCi[4];
     // Exclude common RO fiscal codes starting with RO
-    if (s && n && s !== 'RO') {
+    if (s && n && s !== 'RO' && !cuiSet.has(`RO${n}`)) {
       idSeriesSet.add(`${s} ${n}`);
     }
   }
@@ -130,19 +138,20 @@ export const SmartDataModal: React.FC<SmartDataModalProps> = ({
   const [entities, setEntities] = useState<ExtractedEntities | null>(null);
   const [copiedValue, setCopiedValue] = useState<string | null>(null);
 
-  // Gather existing OCR text or run OCR automatically
+  // Gather existing OCR text or automatically run OCR on any pages that don't have it yet
   useEffect(() => {
-    const existingTexts = pages.map((p) => p.ocrText || '').filter((t) => t.trim().length > 0);
-    if (existingTexts.length > 0) {
-      const full = existingTexts.join('\n\n');
+    const allPagesHaveOcr =
+      pages.length > 0 && pages.every((p) => p.ocrText && p.ocrText.trim().length > 0);
+    if (allPagesHaveOcr) {
+      const full = pages.map((p) => p.ocrText || '').join('\n\n');
       setCombinedText(full);
       setEntities(parseRomanianDocumentEntities(full));
     } else {
-      runFullDocumentAnalysis();
+      runFullDocumentAnalysis(false);
     }
   }, []);
 
-  const runFullDocumentAnalysis = async () => {
+  const runFullDocumentAnalysis = async (forceRescanAll = true) => {
     if (pages.length === 0 || isScanningOcr) return;
     setIsScanningOcr(true);
     setProgress(5);
@@ -152,6 +161,10 @@ export const SmartDataModal: React.FC<SmartDataModalProps> = ({
       const collected: string[] = [];
       for (let i = 0; i < pages.length; i++) {
         const p = pages[i];
+        if (!forceRescanAll && p.ocrText && p.ocrText.trim().length > 0) {
+          collected.push(p.ocrText);
+          continue;
+        }
         setStatusText(`Se extrag datele din pagina ${i + 1} / ${pages.length}...`);
         const txt = await recognizeTextFromImage(
           p.processedImage || p.originalImage,
@@ -177,7 +190,16 @@ export const SmartDataModal: React.FC<SmartDataModalProps> = ({
   };
 
   const handleCopy = (val: string) => {
-    navigator.clipboard.writeText(val);
+    try {
+      navigator.clipboard.writeText(val);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = val;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
     setCopiedValue(val);
     setTimeout(() => setCopiedValue(null), 1800);
   };
@@ -214,6 +236,7 @@ export const SmartDataModal: React.FC<SmartDataModalProps> = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   // Export vCard (.vcf) contact for phone address book
@@ -244,6 +267,7 @@ export const SmartDataModal: React.FC<SmartDataModalProps> = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
 
   const totalFound = entities
@@ -372,7 +396,7 @@ export const SmartDataModal: React.FC<SmartDataModalProps> = ({
                   <strong className="text-cyan-400">{totalFound}</strong>
                 </span>
                 <button
-                  onClick={runFullDocumentAnalysis}
+                  onClick={() => runFullDocumentAnalysis(true)}
                   className="text-xs font-bold text-cyan-400 hover:underline flex items-center gap-1"
                 >
                   <Sparkles className="w-3.5 h-3.5" />

@@ -27,6 +27,7 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
   const [existingPin, setExistingPin] = useState<string | null>(
     localStorage.getItem(VAULT_PIN_STORAGE_KEY)
   );
+  const [currentPinInput, setCurrentPinInput] = useState('');
   const [pinInput, setPinInput] = useState('');
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -35,26 +36,43 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSavePin = () => {
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    if (existingPin && currentPinInput.trim() !== existingPin) {
+      setErrorMsg('Introdu mai întâi codul PIN actual corect pentru a-l putea schimba!');
+      return;
+    }
+
     const clean = pinInput.trim();
     if (!/^\d{4}$/.test(clean)) {
-      setErrorMsg('Codul PIN trebuie să conțină exact 4 cifre (ex: 1234).');
+      setErrorMsg('Noul cod PIN trebuie să conțină exact 4 cifre (ex: 2580).');
       return;
     }
     localStorage.setItem(VAULT_PIN_STORAGE_KEY, clean);
     setExistingPin(clean);
+    setCurrentPinInput('');
     setPinInput('');
-    setErrorMsg(null);
-    setStatusMsg('Codul PIN pentru Seiful de Documente a fost activat!');
+    setStatusMsg(
+      existingPin
+        ? 'Codul PIN a fost schimbat cu succes!'
+        : 'Codul PIN pentru Seiful de Documente a fost activat!'
+    );
   };
 
   const handleRemovePin = async () => {
-    const verify = prompt('Introdu codul PIN actual pentru a dezactiva protecția:');
-    if (verify !== existingPin) {
-      setErrorMsg('Cod PIN incorect!');
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    if (existingPin && currentPinInput.trim() !== existingPin) {
+      setErrorMsg('Introdu codul PIN actual în câmpul „PIN Actual” pentru a dezactiva protecția!');
       return;
     }
+
     localStorage.removeItem(VAULT_PIN_STORAGE_KEY);
     setExistingPin(null);
+    setCurrentPinInput('');
+    setPinInput('');
     // Unlock all locked docs
     const allDocs = await db.documents.toArray();
     for (const d of allDocs) {
@@ -63,13 +81,23 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
       }
     }
     onDataRestored();
-    setStatusMsg('Protecția cu PIN a fost dezactivată și documentele au fost deblocate.');
+    setStatusMsg('Protecția cu PIN a fost dezactivată și toate documentele au fost deblocate.');
   };
 
   // Export entire IndexedDB database (documents + pages + signatures/stamps)
   const handleExportBackup = async () => {
-    setIsWorking(true);
     setErrorMsg(null);
+    setStatusMsg(null);
+
+    if (existingPin && currentPinInput.trim() !== existingPin) {
+      const verify = prompt('Pentru siguranță, introdu codul PIN (4 cifre) înainte de a exporta arhiva:');
+      if (verify !== existingPin) {
+        setErrorMsg('Cod PIN incorect! Exportul arhivei a fost blocat.');
+        return;
+      }
+    }
+
+    setIsWorking(true);
     try {
       const documents = await db.documents.toArray();
       const pages = await db.pages.toArray();
@@ -100,7 +128,7 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
       setStatusMsg(
         `Backup complet descărcat (${documents.length} documente, ${pages.length} pagini, ${signatures.length} semnături/ștampile)!`
       );
-    } catch (err: any) {
+    } catch {
       setErrorMsg('Eroare la crearea fișierului de backup.');
     } finally {
       setIsWorking(false);
@@ -114,6 +142,7 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
 
     setIsWorking(true);
     setErrorMsg(null);
+    setStatusMsg(null);
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -124,8 +153,15 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
           throw new Error('Fișierul selectat nu este un backup ScanPro valid.');
         }
 
-        if (Array.isArray(data.documents) && data.documents.length > 0) {
-          await db.documents.bulkPut(data.documents);
+        const currentPin = localStorage.getItem(VAULT_PIN_STORAGE_KEY);
+        const normalizedDocs = data.documents.map((d: any) => ({
+          ...d,
+          // Ensure locked docs don't become permanently inaccessible if no PIN is configured on the new device
+          isLocked: currentPin ? Boolean(d.isLocked) : false
+        }));
+
+        if (normalizedDocs.length > 0) {
+          await db.documents.bulkPut(normalizedDocs);
         }
         if (Array.isArray(data.pages) && data.pages.length > 0) {
           await db.pages.bulkPut(data.pages);
@@ -136,7 +172,7 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
 
         onDataRestored();
         setStatusMsg(
-          `Restaurare reușită: ${data.documents.length} documente și ${
+          `Restaurare reușită: ${normalizedDocs.length} documente și ${
             data.signatures?.length || 0
           } semnături/ștampile au fost importate!`
         );
@@ -144,6 +180,7 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
         setErrorMsg(err.message || 'Eroare la restaurarea fișierului de backup.');
       } finally {
         setIsWorking(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
     reader.readAsText(file);
@@ -209,35 +246,50 @@ export const VaultBackupModal: React.FC<VaultBackupModalProps> = ({
 
           <p className="text-xs text-slate-400">
             După ce setezi un cod PIN, poți bloca orice document din meniul său (cele 3 puncte `⋮` →{' '}
-            <strong>Blochează cu PIN</strong>). Documentele blocate au imaginea ascunsă și cer PIN la deschidere.
+            <strong>Blochează cu PIN</strong>). Documentele blocate au imaginea ascunsă și cer PIN la deschidere, ștergere sau redenumire.
           </p>
 
-          <div className="flex gap-2">
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
-              placeholder={existingPin ? 'Schimbă PIN (4 cifre)' : 'Setează PIN (ex: 2580)'}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono tracking-widest outline-none focus:border-amber-400"
-            />
-            <button
-              onClick={handleSavePin}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition active:scale-95 flex items-center gap-1"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>{existingPin ? 'Schimbă' : 'Activează PIN'}</span>
-            </button>
+          <div className="space-y-2">
             {existingPin && (
-              <button
-                onClick={handleRemovePin}
-                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-rose-400 font-bold text-xs transition"
-                title="Dezactivează PIN"
-              >
-                <Unlock className="w-4 h-4" />
-              </button>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={currentPinInput}
+                onChange={(e) => setCurrentPinInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="PIN Actual (4 cifre) - obligatoriu pt. modificare/dezactivare"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono tracking-widest outline-none focus:border-amber-400"
+              />
             )}
+
+            <div className="flex gap-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                placeholder={existingPin ? 'Nou PIN (4 cifre)' : 'Setează PIN (ex: 2580)'}
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-mono tracking-widest outline-none focus:border-amber-400"
+              />
+              <button
+                onClick={handleSavePin}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition active:scale-95 flex items-center gap-1"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>{existingPin ? 'Schimbă' : 'Activează PIN'}</span>
+              </button>
+              {existingPin && (
+                <button
+                  onClick={handleRemovePin}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950 text-rose-400 font-bold text-xs transition flex items-center gap-1"
+                  title="Dezactivează PIN"
+                >
+                  <Unlock className="w-4 h-4" />
+                  <span className="hidden sm:inline">Dezactivează</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

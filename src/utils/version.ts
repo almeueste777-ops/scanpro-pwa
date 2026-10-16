@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v3.0.0';
-export const APP_BUILD_NAME = 'Original AI Edition: IBAN/CUI Extractor, Colaj A4, Seif PIN & Cititor Vocal';
+export const APP_VERSION = 'v3.1.0';
+export const APP_BUILD_NAME = 'Audit & Reparații Complete v3.1: Securitate PIN, Colaj A4 Interactiv, OCR Complet';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload

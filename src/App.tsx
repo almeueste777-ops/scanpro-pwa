@@ -369,6 +369,7 @@ export const App: React.FC = () => {
       {activeView === 'filter' && currentWarpedCanvas && (
         <FilterView
           warpedCanvas={currentWarpedCanvas}
+          isEditingExistingPage={Boolean(editingPageId)}
           onSavePage={handleSavePage}
           onBackToCrop={() => setActiveView('crop')}
         />

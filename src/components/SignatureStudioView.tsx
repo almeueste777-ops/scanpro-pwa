@@ -9,7 +9,8 @@ import {
   Trash2,
   Plus,
   ShieldCheck,
-  FileText
+  FileText,
+  Lock
 } from 'lucide-react';
 import {
   type SignatureItem,
@@ -18,6 +19,7 @@ import {
   deleteSignatureItem
 } from '../db';
 import { SignatureModal, type CreationMode } from './SignatureModal';
+import { VAULT_PIN_STORAGE_KEY } from './VaultBackupModal';
 import { APP_VERSION } from '../utils/version';
 
 interface SignatureStudioViewProps {
@@ -301,6 +303,18 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
                   <button
                     key={doc.id}
                     onClick={() => {
+                      if (doc.isLocked) {
+                        const savedPin = localStorage.getItem(VAULT_PIN_STORAGE_KEY);
+                        if (savedPin) {
+                          const entered = prompt(
+                            `Documentul „${doc.title}” este protejat. Introdu PIN-ul (4 cifre):`
+                          );
+                          if (entered !== savedPin) {
+                            if (entered !== null) alert('Cod PIN incorect!');
+                            return;
+                          }
+                        }
+                      }
                       const docId = doc.id;
                       const itemToApply = selectedItemToUse;
                       setSelectedItemToUse(null);
@@ -309,7 +323,11 @@ export const SignatureStudioView: React.FC<SignatureStudioViewProps> = ({
                     className="w-full p-3 rounded-xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700/80 text-left flex items-center justify-between transition group"
                   >
                     <div className="flex items-center gap-2.5">
-                      <FileText className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      {doc.isLocked ? (
+                        <Lock className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                      )}
                       <div>
                         <h4 className="text-xs font-bold text-white group-hover:text-emerald-400 transition">
                           {doc.title}

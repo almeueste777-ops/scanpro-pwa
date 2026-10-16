@@ -74,6 +74,7 @@ export const PageRetouchModal: React.FC<PageRetouchModalProps> = ({
 
   const handleStart = (e: React.TouchEvent | React.MouseEvent) => {
     if (!canvasRef.current) return;
+    if ('touches' in e && e.touches.length > 1) return;
     setIsDrawing(true);
     const pt = getCanvasCoords(e);
     lastPtRef.current = pt;
@@ -82,6 +83,7 @@ export const PageRetouchModal: React.FC<PageRetouchModalProps> = ({
 
   const handleMove = (e: React.TouchEvent | React.MouseEvent) => {
     if (!isDrawing || !lastPtRef.current) return;
+    if ('touches' in e && e.touches.length > 1) return;
     const pt = getCanvasCoords(e);
     drawSegment(lastPtRef.current, pt);
     lastPtRef.current = pt;

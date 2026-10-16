@@ -83,11 +83,24 @@ export const HomeView: React.FC<HomeViewProps> = ({
     });
   }, [documents]);
 
-  // Filtered documents (matches title OR OCR text inside pages)
+  // Helper to verify PIN if document is locked
+  const verifyDocPin = (doc: DocumentItem, actionLabel: string): boolean => {
+    if (!doc.isLocked) return true;
+    const savedPin = localStorage.getItem(VAULT_PIN_STORAGE_KEY);
+    if (!savedPin) return true;
+    const entered = prompt(`Documentul „${doc.title}” este protejat. Introdu PIN-ul (4 cifre) pentru ${actionLabel}:`);
+    if (entered !== savedPin) {
+      if (entered !== null) alert('Cod PIN incorect!');
+      return false;
+    }
+    return true;
+  };
+
+  // Filtered documents (matches title OR OCR text inside pages — excluding OCR leak for locked docs)
   const filtered = documents.filter((doc) => {
     const q = searchQuery.toLowerCase().trim();
     const matchesTitle = doc.title.toLowerCase().includes(q);
-    const matchesOcr = q.length > 1 && (ocrIndex[doc.id] || '').includes(q);
+    const matchesOcr = !doc.isLocked && q.length > 1 && (ocrIndex[doc.id] || '').includes(q);
     const matchesSearch = !q || matchesTitle || matchesOcr;
     const matchesCategory =
       selectedCategory === 'toate' || doc.category === selectedCategory;
@@ -96,6 +109,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const handleDelete = async (docId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const targetDoc = documents.find((d) => d.id === docId);
+    if (targetDoc && !verifyDocPin(targetDoc, 'ștergere')) return;
     if (confirm('Ești sigur că vrei să ștergi acest document?')) {
       await deleteDocument(docId);
       setActiveMenuDocId(null);
@@ -105,6 +120,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   const handleRename = async (doc: DocumentItem, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!verifyDocPin(doc, 'redenumire')) return;
     const newName = prompt('Introdu noul nume pentru document:', doc.title);
     if (newName && newName.trim()) {
       await db.documents.update(doc.id, {
@@ -127,11 +143,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
     }
 
     if (doc.isLocked) {
-      const entered = prompt('Introdu codul PIN (4 cifre) pentru a debloca documentul:');
-      if (entered !== savedPin) {
-        if (entered !== null) alert('Cod PIN incorect!');
-        return;
-      }
+      if (!verifyDocPin(doc, 'deblocare')) return;
       await db.documents.update(doc.id, { isLocked: false, updatedAt: Date.now() });
     } else {
       await db.documents.update(doc.id, { isLocked: true, updatedAt: Date.now() });
@@ -141,16 +153,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   const handleOpenDocWithPinCheck = (doc: DocumentItem) => {
-    if (doc.isLocked) {
-      const savedPin = localStorage.getItem(VAULT_PIN_STORAGE_KEY);
-      if (savedPin) {
-        const entered = prompt(`Documentul „${doc.title}” este protejat. Introdu PIN-ul (4 cifre):`);
-        if (entered !== savedPin) {
-          if (entered !== null) alert('Cod PIN incorect!');
-          return;
-        }
-      }
-    }
+    if (!verifyDocPin(doc, 'deschidere')) return;
     onOpenDocument(doc.id);
   };
 
@@ -161,6 +164,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   // Toggle selection in Merge Mode
   const toggleMergeSelect = (docId: string) => {
+    const targetDoc = documents.find((d) => d.id === docId);
+    if (targetDoc && !selectedForMerge.includes(docId) && !verifyDocPin(targetDoc, 'îmbinare')) {
+      return;
+    }
     setSelectedForMerge((prev) =>
       prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId]
     );

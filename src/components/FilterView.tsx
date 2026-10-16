@@ -15,6 +15,7 @@ import { applyFilter, rotateCanvas, createThumbnail } from '../utils/imageProces
 
 interface FilterViewProps {
   warpedCanvas: HTMLCanvasElement;
+  isEditingExistingPage?: boolean;
   onSavePage: (
     processedImage: string,
     thumbnail: string,
@@ -69,6 +70,7 @@ const FILTER_OPTIONS: FilterOption[] = [
 
 export const FilterView: React.FC<FilterViewProps> = ({
   warpedCanvas,
+  isEditingExistingPage = false,
   onSavePage,
   onBackToCrop
 }) => {
@@ -282,20 +284,22 @@ export const FilterView: React.FC<FilterViewProps> = ({
 
         {/* Bottom Save & Continue Action Bar */}
         <div className="flex items-center justify-between px-5 pb-6 pt-2 gap-3">
-          <button
-            onClick={() => handleSave(true)}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm transition active:scale-95 border border-slate-700"
-          >
-            <Plus className="w-4 h-4 text-emerald-400" />
-            <span>Scanează Următoarea</span>
-          </button>
+          {!isEditingExistingPage && (
+            <button
+              onClick={() => handleSave(true)}
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-sm transition active:scale-95 border border-slate-700"
+            >
+              <Plus className="w-4 h-4 text-emerald-400" />
+              <span>Scanează Următoarea</span>
+            </button>
+          )}
 
           <button
             onClick={() => handleSave(false)}
             className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm shadow-xl shadow-emerald-500/25 transition active:scale-95"
           >
             <Check className="w-5 h-5 stroke-[2.5]" />
-            <span>Finalizează Pagina</span>
+            <span>{isEditingExistingPage ? 'Salvează Modificarea' : 'Finalizează Pagina'}</span>
           </button>
         </div>
       </div>

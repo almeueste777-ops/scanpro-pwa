@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, LayoutGrid, Check } from 'lucide-react';
 import type { DocumentPage } from '../db';
 import { loadImage, createThumbnail } from '../utils/imageProcessing';
@@ -17,6 +17,7 @@ export const CollageModal: React.FC<CollageModalProps> = ({
   onClose
 }) => {
   const [layout, setLayout] = useState<GridLayout>(pages.length > 2 ? '4grid' : '2v');
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => pages.map((p) => p.id));
   const [showBorders, setShowBorders] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -24,97 +25,120 @@ export const CollageModal: React.FC<CollageModalProps> = ({
   const previewRef = useRef<HTMLCanvasElement>(null);
   const fullCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const renderCollage = useCallback(async () => {
-    const a4W = 1240;
-    const a4H = 1754;
-    const out = document.createElement('canvas');
-    out.width = a4W;
-    out.height = a4H;
-    const ctx = out.getContext('2d')!;
+  const maxSlots =
+    layout === '2v' || layout === '2h' ? 2 : layout === '4grid' ? 4 : 6;
 
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, a4W, a4H);
-
-    let cols = 1;
-    let rows = 2;
-    if (layout === '2v') {
-      cols = 1;
-      rows = 2;
-    } else if (layout === '2h') {
-      cols = 2;
-      rows = 1;
-    } else if (layout === '4grid') {
-      cols = 2;
-      rows = 2;
-    } else if (layout === '6grid') {
-      cols = 2;
-      rows = 3;
-    }
-
-    const maxItems = cols * rows;
-    const itemsToDraw = pages.slice(0, maxItems);
-
-    const padOuter = 56;
-    const gap = 36;
-    const availW = a4W - padOuter * 2 - gap * (cols - 1);
-    const availH = a4H - padOuter * 2 - gap * (rows - 1);
-    const cellW = Math.floor(availW / cols);
-    const cellH = Math.floor(availH / rows);
-
-    for (let i = 0; i < itemsToDraw.length; i++) {
-      const p = itemsToDraw[i];
-      const r = Math.floor(i / cols);
-      const c = i % cols;
-
-      const cellX = padOuter + c * (cellW + gap);
-      const cellY = padOuter + r * (cellH + gap);
-
-      try {
-        const img = await loadImage(p.processedImage || p.originalImage);
-        const labelSpace = showLabels ? 28 : 0;
-        const maxImgW = cellW - 16;
-        const maxImgH = cellH - 16 - labelSpace;
-
-        const scale = Math.min(maxImgW / img.width, maxImgH / img.height);
-        const dw = Math.round(img.width * scale);
-        const dh = Math.round(img.height * scale);
-        const dx = Math.round(cellX + (cellW - dw) / 2);
-        const dy = Math.round(cellY + labelSpace + (cellH - labelSpace - dh) / 2);
-
-        if (showBorders) {
-          ctx.strokeStyle = '#cbd5e1';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(dx - 3, dy - 3, dw + 6, dh + 6);
-        }
-
-        ctx.drawImage(img, dx, dy, dw, dh);
-
-        if (showLabels) {
-          ctx.fillStyle = '#475569';
-          ctx.font = 'bold 20px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillText(` #${i + 1}`, cellX + cellW / 2, dy - 10);
-        }
-      } catch (e) {
-        console.warn('Collage image load error:', e);
-      }
-    }
-
-    fullCanvasRef.current = out;
-    if (previewRef.current) {
-      previewRef.current.width = a4W;
-      previewRef.current.height = a4H;
-      const pCtx = previewRef.current.getContext('2d');
-      if (pCtx) pCtx.drawImage(out, 0, 0);
-    }
-  }, [pages, layout, showBorders, showLabels]);
+  const toggleSelectPage = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
   useEffect(() => {
-    renderCollage();
-  }, [renderCollage]);
+    let cancelled = false;
+
+    const buildCollage = async () => {
+      const a4W = 1240;
+      const a4H = 1754;
+      const out = document.createElement('canvas');
+      out.width = a4W;
+      out.height = a4H;
+      const ctx = out.getContext('2d')!;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, a4W, a4H);
+
+      let cols = 1;
+      let rows = 2;
+      if (layout === '2v') {
+        cols = 1;
+        rows = 2;
+      } else if (layout === '2h') {
+        cols = 2;
+        rows = 1;
+      } else if (layout === '4grid') {
+        cols = 2;
+        rows = 2;
+      } else if (layout === '6grid') {
+        cols = 2;
+        rows = 3;
+      }
+
+      const maxItems = cols * rows;
+      // Preserve order in which user selected pages (or document order)
+      const activePages = selectedIds
+        .map((id) => pages.find((p) => p.id === id))
+        .filter((p): p is DocumentPage => Boolean(p))
+        .slice(0, maxItems);
+
+      const padOuter = 56;
+      const gap = 36;
+      const availW = a4W - padOuter * 2 - gap * (cols - 1);
+      const availH = a4H - padOuter * 2 - gap * (rows - 1);
+      const cellW = Math.floor(availW / cols);
+      const cellH = Math.floor(availH / rows);
+
+      for (let i = 0; i < activePages.length; i++) {
+        if (cancelled) return;
+        const p = activePages[i];
+        const r = Math.floor(i / cols);
+        const c = i % cols;
+
+        const cellX = padOuter + c * (cellW + gap);
+        const cellY = padOuter + r * (cellH + gap);
+
+        try {
+          const img = await loadImage(p.processedImage || p.originalImage);
+          if (cancelled) return;
+
+          const labelSpace = showLabels ? 28 : 0;
+          const maxImgW = cellW - 16;
+          const maxImgH = cellH - 16 - labelSpace;
+
+          const scale = Math.min(maxImgW / img.width, maxImgH / img.height);
+          const dw = Math.round(img.width * scale);
+          const dh = Math.round(img.height * scale);
+          const dx = Math.round(cellX + (cellW - dw) / 2);
+          const dy = Math.round(cellY + labelSpace + (cellH - labelSpace - dh) / 2);
+
+          if (showBorders) {
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(dx - 3, dy - 3, dw + 6, dh + 6);
+          }
+
+          ctx.drawImage(img, dx, dy, dw, dh);
+
+          if (showLabels) {
+            ctx.fillStyle = '#475569';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`#${i + 1}`, cellX + cellW / 2, dy - 10);
+          }
+        } catch (e) {
+          console.warn('Collage image load error:', e);
+        }
+      }
+
+      if (cancelled) return;
+      fullCanvasRef.current = out;
+      if (previewRef.current) {
+        previewRef.current.width = a4W;
+        previewRef.current.height = a4H;
+        const pCtx = previewRef.current.getContext('2d');
+        if (pCtx) pCtx.drawImage(out, 0, 0);
+      }
+    };
+
+    buildCollage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pages, selectedIds, layout, showBorders, showLabels]);
 
   const handleSave = async () => {
-    if (!fullCanvasRef.current || isSaving) return;
+    if (!fullCanvasRef.current || isSaving || selectedIds.length === 0) return;
     setIsSaving(true);
     try {
       const dataUrl = fullCanvasRef.current.toDataURL('image/jpeg', 0.94);
@@ -175,6 +199,54 @@ export const CollageModal: React.FC<CollageModalProps> = ({
             ))}
           </div>
 
+          {/* Interactive Page Selector */}
+          {pages.length > 1 && (
+            <div className="bg-slate-950/90 p-3 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-300 font-semibold">
+                  Selectează paginile pentru colaj (max. {maxSlots}):
+                </span>
+                <span className="text-emerald-400 font-bold">
+                  {Math.min(selectedIds.length, maxSlots)} / {maxSlots} folosite
+                </span>
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                {pages.map((p, idx) => {
+                  const selIdx = selectedIds.indexOf(p.id);
+                  const isSelected = selIdx !== -1;
+                  const isIncluded = selIdx !== -1 && selIdx < maxSlots;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => toggleSelectPage(p.id)}
+                      className={`relative flex-shrink-0 w-14 h-18 rounded-lg overflow-hidden border-2 transition ${
+                        isIncluded
+                          ? 'border-emerald-400 ring-2 ring-emerald-500/30'
+                          : isSelected
+                            ? 'border-amber-500/60 opacity-70'
+                            : 'border-slate-800 opacity-40'
+                      }`}
+                    >
+                      <img
+                        src={p.thumbnail || p.processedImage || p.originalImage}
+                        alt={`P${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-0.5 left-0.5 px-1 rounded bg-black/80 text-[9px] font-bold text-white">
+                        P{idx + 1}
+                      </span>
+                      {isIncluded && (
+                        <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-emerald-500 text-slate-950 text-[9px] font-black flex items-center justify-center">
+                          {selIdx + 1}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Toggles */}
           <div className="flex items-center justify-between gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
@@ -184,7 +256,7 @@ export const CollageModal: React.FC<CollageModalProps> = ({
                 onChange={(e) => setShowBorders(e.target.checked)}
                 className="accent-emerald-500"
               />
-              <span>Chenar subțire în jurul fiecărui bon</span>
+              <span>Chenar subțire</span>
             </label>
 
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
@@ -201,11 +273,11 @@ export const CollageModal: React.FC<CollageModalProps> = ({
           {/* Live A4 Preview */}
           <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3 flex flex-col items-center">
             <span className="text-[10px] text-slate-400 font-semibold mb-2">
-              Previzualizare Coală A4 ({pages.length} pagini disponibile)
+              Previzualizare Coală A4 (1240 × 1754 px)
             </span>
             <canvas
               ref={previewRef}
-              className="max-h-[340px] w-auto rounded-lg shadow-2xl border border-slate-700 bg-white"
+              className="max-h-[300px] w-auto rounded-lg shadow-2xl border border-slate-700 bg-white"
             />
           </div>
         </div>
@@ -220,8 +292,8 @@ export const CollageModal: React.FC<CollageModalProps> = ({
           </button>
           <button
             onClick={handleSave}
-            disabled={isSaving}
-            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-xl shadow-emerald-500/20 flex items-center justify-center gap-1.5 active:scale-95 transition"
+            disabled={isSaving || selectedIds.length === 0}
+            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-xl shadow-emerald-500/20 disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-95 transition"
           >
             <Check className="w-4 h-4 stroke-[2.5]" />
             <span>{isSaving ? 'Se generează...' : 'Adaugă Coala A4 în Document'}</span>
