@@ -12,19 +12,29 @@ import {
   ChevronLeft as ArrowLeft,
   ChevronRight as ArrowRight,
   Maximize2,
-  PenTool
+  PenTool,
+  Eraser,
+  Wand2
 } from 'lucide-react';
 import {
   db,
   deletePage,
   deleteDocument,
   type DocumentItem,
-  type DocumentPage
+  type DocumentPage,
+  type FilterType
 } from '../db';
-import { rotateCanvas, createThumbnail } from '../utils/imageProcessing';
+import {
+  loadImage,
+  warpPerspective,
+  applyFilter,
+  rotateCanvas,
+  createThumbnail
+} from '../utils/imageProcessing';
 import { PdfExportModal } from './PdfExportModal';
 import { OcrModal } from './OcrModal';
 import { SignDocumentView } from './SignDocumentView';
+import { PageRetouchModal } from './PageRetouchModal';
 
 interface DocumentDetailProps {
   documentId: string;
@@ -47,8 +57,10 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const [titleInput, setTitleInput] = useState('');
   const [showExportModal, setShowExportModal] = useState(false);
   const [ocrTargetPage, setOcrTargetPage] = useState<DocumentPage | null>(null);
+  const [retouchTargetPage, setRetouchTargetPage] = useState<DocumentPage | null>(null);
   const [fullPreviewPage, setFullPreviewPage] = useState<DocumentPage | null>(null);
   const [signViewPageIndex, setSignViewPageIndex] = useState<number | null>(null);
+  const [isBatchFiltering, setIsBatchFiltering] = useState<boolean>(false);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -87,6 +99,47 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
     loadData();
   };
 
+  // Batch Apply Filter to ALL pages in the document
+  const handleApplyBatchFilter = async (targetFilter: FilterType) => {
+    if (pages.length === 0 || isBatchFiltering) return;
+    setIsBatchFiltering(true);
+    try {
+      for (let i = 0; i < pages.length; i++) {
+        const p = pages[i];
+        const rawImg = await loadImage(p.originalImage);
+        let baseCanvas: HTMLCanvasElement;
+        if (p.corners) {
+          baseCanvas = warpPerspective(rawImg, p.corners);
+        } else {
+          baseCanvas = document.createElement('canvas');
+          baseCanvas.width = rawImg.width;
+          baseCanvas.height = rawImg.height;
+          baseCanvas.getContext('2d')!.drawImage(rawImg, 0, 0);
+        }
+        const rotated = rotateCanvas(baseCanvas, p.rotation || 0);
+        const filtered = applyFilter(rotated, targetFilter, p.brightness || 0, p.contrast || 0);
+        const nextProcessed = filtered.toDataURL('image/jpeg', 0.94);
+        const nextThumb = createThumbnail(filtered, 320);
+
+        await db.pages.update(p.id, {
+          processedImage: nextProcessed,
+          thumbnail: nextThumb,
+          filter: targetFilter
+        });
+
+        if (i === 0) {
+          await db.documents.update(documentId, {
+            thumbnail: nextThumb,
+            updatedAt: Date.now()
+          });
+        }
+      }
+      await loadData();
+    } finally {
+      setIsBatchFiltering(false);
+    }
+  };
+
   // Rotate a page 90 degrees
   const handleRotatePage = async (page: DocumentPage) => {
     const img = new Image();
@@ -108,7 +161,6 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         rotation: ((page.rotation || 0) + 90) % 360
       });
 
-      // If it's the first page, update document cover thumbnail
       if (page.pageNumber === 1) {
         await db.documents.update(documentId, { thumbnail: nextThumb });
       }
@@ -229,27 +281,56 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           </div>
         </div>
 
-        {/* Category Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pt-3 pb-1 no-scrollbar">
-          {[
-            { id: 'general', label: 'General' },
-            { id: 'facturi', label: 'Facturi & Bonuri' },
-            { id: 'contracte', label: 'Contracte' },
-            { id: 'acte', label: 'Acte Identitate' },
-            { id: 'notite', label: 'Notițe' }
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => handleCategoryChange(cat.id as any)}
-              className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition ${
-                doc.category === cat.id
-                  ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border border-transparent'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
+        {/* Category Chips + Batch Filter Bar */}
+        <div className="flex items-center justify-between gap-2 overflow-x-auto pt-3 pb-1 no-scrollbar">
+          <div className="flex items-center gap-1.5">
+            {[
+              { id: 'general', label: 'General' },
+              { id: 'facturi', label: 'Facturi' },
+              { id: 'contracte', label: 'Contracte' },
+              { id: 'acte', label: 'Acte ID' },
+              { id: 'notite', label: 'Notițe' }
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => handleCategoryChange(cat.id as any)}
+                className={`text-[11px] px-2.5 py-1 rounded-full font-medium transition whitespace-nowrap ${
+                  doc.category === cat.id
+                    ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
+                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border border-transparent'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Batch Filter Quick Buttons */}
+          {pages.length > 0 && (
+            <div className="flex items-center gap-1 pl-2 border-l border-slate-800">
+              <Wand2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">
+                Filtru toate:
+              </span>
+              {(
+                [
+                  { id: 'magic', label: 'Magic' },
+                  { id: 'bw', label: 'Alb-Negru' },
+                  { id: 'sharp', label: 'Clar' },
+                  { id: 'original', label: 'Orig' }
+                ] as { id: FilterType; label: string }[]
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  disabled={isBatchFiltering}
+                  onClick={() => handleApplyBatchFilter(f.id)}
+                  className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-[10px] font-bold text-slate-300 transition whitespace-nowrap"
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -290,7 +371,7 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
 
               {/* Action Toolbar per page */}
               <div className="p-2 bg-slate-900 flex items-center justify-between border-t border-slate-800/80">
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5">
                   {/* Reorder Left */}
                   <button
                     onClick={() => handleMovePage(idx, 'left')}
@@ -318,6 +399,15 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
                     title="Rotește 90°"
                   >
                     <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Smart Eraser / Highlighter / Redact */}
+                  <button
+                    onClick={() => setRetouchTargetPage(page)}
+                    className="p-1 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-slate-800"
+                    title="Radieră pete, Evidențiator & Cenzurare CNP"
+                  >
+                    <Eraser className="w-3.5 h-3.5" />
                   </button>
 
                   {/* OCR Button */}
@@ -396,11 +486,21 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
         </button>
 
         <button
+          onClick={() => {
+            if (pages[0]) setRetouchTargetPage(pages[0]);
+          }}
+          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 font-semibold text-xs active:scale-95 transition"
+        >
+          <Eraser className="w-4 h-4 text-amber-400" />
+          <span>Radieră / Marker</span>
+        </button>
+
+        <button
           onClick={() => setSignViewPageIndex(0)}
           className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-blue-300 font-semibold text-xs active:scale-95 transition"
         >
           <PenTool className="w-4 h-4 text-blue-400" />
-          <span>Semnătură / Ștampilă</span>
+          <span>Semnează</span>
         </button>
 
         <button
@@ -421,9 +521,9 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           <img
             src={fullPreviewPage.processedImage || fullPreviewPage.originalImage}
             alt="Fullscreen"
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            className="max-w-full max-h-[82vh] object-contain rounded-lg shadow-2xl"
           />
-          <div className="mt-4 flex gap-3">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -432,7 +532,19 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
               }}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold"
             >
-              Reajustează Colțuri
+              Ajustează Colțuri
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const target = fullPreviewPage;
+                setFullPreviewPage(null);
+                setRetouchTargetPage(target);
+              }}
+              className="px-4 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-xl text-xs font-semibold flex items-center gap-1.5"
+            >
+              <Eraser className="w-3.5 h-3.5" />
+              Radieră / Marker
             </button>
             <button
               onClick={() => setFullPreviewPage(null)}
@@ -462,6 +574,26 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             loadData();
           }}
           onClose={() => setOcrTargetPage(null)}
+        />
+      )}
+
+      {retouchTargetPage && (
+        <PageRetouchModal
+          pageImage={retouchTargetPage.processedImage || retouchTargetPage.originalImage}
+          onSave={async (newProcessed, newThumb) => {
+            await db.pages.update(retouchTargetPage.id, {
+              processedImage: newProcessed,
+              thumbnail: newThumb
+            });
+            if (retouchTargetPage.pageNumber === 1) {
+              await db.documents.update(documentId, {
+                thumbnail: newThumb,
+                updatedAt: Date.now()
+              });
+            }
+            await loadData();
+          }}
+          onClose={() => setRetouchTargetPage(null)}
         />
       )}
 

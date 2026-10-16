@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Camera,
   Image as ImageIcon,
@@ -9,12 +9,24 @@ import {
   MoreVertical,
   Trash2,
   Edit2,
-  ShieldCheck,
   PenTool,
-  RefreshCw
+  RefreshCw,
+  CreditCard,
+  BookOpen,
+  GitMerge,
+  CheckSquare,
+  Square,
+  X
 } from 'lucide-react';
-import { deleteDocument, db, type DocumentItem } from '../db';
+import {
+  deleteDocument,
+  createDocument,
+  addPageToDocument,
+  db,
+  type DocumentItem
+} from '../db';
 import { PwaInstallPrompt } from './PwaInstallPrompt';
+import { IdCardScannerModal } from './IdCardScannerModal';
 import { APP_VERSION, forceAppUpdate } from '../utils/version';
 
 interface HomeViewProps {
@@ -22,6 +34,7 @@ interface HomeViewProps {
   onOpenDocument: (id: string) => void;
   onNewScanCamera: () => void;
   onNewScanGallery: (files: FileList) => void;
+  onNewBookScan: (file: File) => void;
   onOpenSignatureStudio: () => void;
   onRefresh: () => void;
 }
@@ -31,6 +44,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenDocument,
   onNewScanCamera,
   onNewScanGallery,
+  onNewBookScan,
   onOpenSignatureStudio,
   onRefresh
 }) => {
@@ -38,11 +52,38 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<string>('toate');
   const [activeMenuDocId, setActiveMenuDocId] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [showIdCardModal, setShowIdCardModal] = useState(false);
 
-  // Filtered documents
+  // Merge Documents state
+  const [isMergeMode, setIsMergeMode] = useState(false);
+  const [selectedForMerge, setSelectedForMerge] = useState<string[]>([]);
+  const [isMerging, setIsMerging] = useState(false);
+
+  // Full-text OCR search index (documentId -> concatenated ocrText)
+  const [ocrIndex, setOcrIndex] = useState<Record<string, string>>({});
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const bookInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Load OCR text map so search bar searches inside scanned text too
+  useEffect(() => {
+    db.pages.toArray().then((allPages) => {
+      const map: Record<string, string> = {};
+      for (const p of allPages) {
+        if (p.ocrText) {
+          map[p.documentId] = (map[p.documentId] || '') + ' ' + p.ocrText.toLowerCase();
+        }
+      }
+      setOcrIndex(map);
+    });
+  }, [documents]);
+
+  // Filtered documents (matches title OR OCR text inside pages)
   const filtered = documents.filter((doc) => {
-    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase().trim();
+    const matchesTitle = doc.title.toLowerCase().includes(q);
+    const matchesOcr = q.length > 1 && (ocrIndex[doc.id] || '').includes(q);
+    const matchesSearch = !q || matchesTitle || matchesOcr;
     const matchesCategory =
       selectedCategory === 'toate' || doc.category === selectedCategory;
     return matchesSearch && matchesCategory;
@@ -75,6 +116,61 @@ export const HomeView: React.FC<HomeViewProps> = ({
     await forceAppUpdate();
   };
 
+  // Toggle selection in Merge Mode
+  const toggleMergeSelect = (docId: string) => {
+    setSelectedForMerge((prev) =>
+      prev.includes(docId) ? prev.filter((id) => id !== docId) : [...prev, docId]
+    );
+  };
+
+  // Execute Merge of selected documents
+  const handleConfirmMerge = async () => {
+    if (selectedForMerge.length < 2 || isMerging) return;
+    setIsMerging(true);
+    try {
+      const firstDoc = documents.find((d) => d.id === selectedForMerge[0]);
+      const mergedTitle = prompt(
+        'Numele noului document îmbinat:',
+        `${firstDoc?.title || 'Dosar'} (Îmbinat)`
+      );
+      if (!mergedTitle) {
+        setIsMerging(false);
+        return;
+      }
+
+      const newDoc = await createDocument(mergedTitle.trim(), firstDoc?.category || 'general');
+
+      for (const docId of selectedForMerge) {
+        const docPages = await db.pages
+          .where('documentId')
+          .equals(docId)
+          .sortBy('pageNumber');
+        for (const p of docPages) {
+          await addPageToDocument(newDoc.id, {
+            originalImage: p.originalImage,
+            processedImage: p.processedImage,
+            thumbnail: p.thumbnail,
+            width: p.width,
+            height: p.height,
+            corners: p.corners,
+            filter: p.filter,
+            brightness: p.brightness,
+            contrast: p.contrast,
+            rotation: p.rotation,
+            ocrText: p.ocrText
+          });
+        }
+      }
+
+      setIsMergeMode(false);
+      setSelectedForMerge([]);
+      await onRefresh();
+      onOpenDocument(newDoc.id);
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col pb-32 select-none">
       {/* Top Header */}
@@ -91,11 +187,30 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   {APP_VERSION}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">Scanner & Studio Semnături</p>
+              <p className="text-[11px] text-slate-400">AI Document Scanner & VIP Suite</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Merge Documents Toggle */}
+            {documents.length >= 2 && (
+              <button
+                onClick={() => {
+                  setIsMergeMode(!isMergeMode);
+                  setSelectedForMerge([]);
+                }}
+                className={`flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl border transition active:scale-95 ${
+                  isMergeMode
+                    ? 'bg-purple-500 text-slate-950 border-purple-400'
+                    : 'bg-slate-800/90 text-purple-300 border-purple-500/30 hover:bg-slate-800'
+                }`}
+                title="Îmbină mai multe documente într-un singur PDF"
+              >
+                <GitMerge className="w-3.5 h-3.5" />
+                <span>{isMergeMode ? 'Anulează' : 'Îmbină'}</span>
+              </button>
+            )}
+
             {/* Cache-Buster Force Update Button */}
             <button
               onClick={handleForceUpdate}
@@ -106,23 +221,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin' : ''}`} />
               <span>{isUpdating ? 'Se curăță...' : 'Actualizează'}</span>
             </button>
-
-            <div className="hidden sm:flex items-center gap-1 text-[11px] text-slate-400 bg-slate-800/80 px-2 py-1.5 rounded-xl border border-slate-700/60">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Privat</span>
-            </div>
           </div>
         </div>
 
-        {/* Search Bar */}
+        {/* Search Bar (Titles + OCR Content) */}
         <div className="relative mb-3">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Caută în documente..."
+            placeholder="Caută după nume sau text din interiorul paginilor (OCR)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
+            className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
           />
         </div>
 
@@ -151,38 +261,119 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
+      {/* Merge Mode Floating Banner */}
+      {isMergeMode && (
+        <div className="mx-4 mt-3 p-3 rounded-2xl bg-purple-950/90 border border-purple-500/50 flex items-center justify-between gap-2 shadow-xl">
+          <div className="text-xs text-purple-200 font-semibold">
+            Selectează cel puțin 2 documente ({selectedForMerge.length} selectate)
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleConfirmMerge}
+              disabled={selectedForMerge.length < 2 || isMerging}
+              className="px-3.5 py-1.5 rounded-xl bg-purple-500 hover:bg-purple-400 disabled:opacity-40 text-slate-950 font-black text-xs transition"
+            >
+              {isMerging ? 'Se îmbină...' : 'Combină în 1 Dosar'}
+            </button>
+            <button
+              onClick={() => {
+                setIsMergeMode(false);
+                setSelectedForMerge([]);
+              }}
+              className="p-1.5 rounded-lg text-purple-300 hover:bg-purple-900"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* PWA Install Banner */}
       <div className="pt-3">
         <PwaInstallPrompt />
       </div>
 
-      {/* PROMINENT FEATURE: Studio Semnături & Ștampile */}
-      <div className="px-4 mb-2">
-        <div
-          onClick={onOpenSignatureStudio}
-          className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/80 via-slate-900 to-indigo-950/80 border border-blue-500/40 shadow-xl cursor-pointer hover:border-blue-400 active:scale-[0.99] transition flex items-center justify-between gap-3 group"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400 group-hover:scale-105 transition flex-shrink-0 shadow-lg shadow-blue-500/10">
-              <PenTool className="w-6 h-6 stroke-[2.2]" />
+      {/* VIP SMART SCANNER MODES RIBBON */}
+      <div className="px-4 mb-3">
+        <div className="grid grid-cols-3 gap-2.5">
+          {/* 1. Semnături & Ștampile */}
+          <div
+            onClick={onOpenSignatureStudio}
+            className="p-3 rounded-2xl bg-gradient-to-br from-blue-950/90 via-slate-900 to-indigo-950/90 border border-blue-500/40 shadow-lg cursor-pointer hover:border-blue-400 active:scale-95 transition flex flex-col justify-between gap-2"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                <PenTool className="w-5 h-5" />
+              </div>
+              <span className="px-1.5 py-0.5 rounded bg-blue-500 text-white text-[8px] font-black uppercase">
+                STUDIO
+              </span>
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-sm font-black text-white tracking-wide">
-                  Semnături & Ștampile
-                </h3>
-                <span className="px-1.5 py-0.5 rounded-md bg-gradient-to-r from-blue-500 to-indigo-500 text-white text-[9px] font-black uppercase shadow-sm">
-                  NOU
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Desenează, scanează de pe foaie, importă sau generează ștampile oficiale
+              <h3 className="text-xs font-extrabold text-white leading-tight">
+                Semnături & Ștampile
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                Aplică pe PDF
               </p>
             </div>
           </div>
-          <button className="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-500/25 flex-shrink-0 transition active:scale-95 whitespace-nowrap">
-            Deschide Studio →
-          </button>
+
+          {/* 2. Act ID / Buletin Față-Verso pe A4 */}
+          <div
+            onClick={() => setShowIdCardModal(true)}
+            className="p-3 rounded-2xl bg-gradient-to-br from-amber-950/80 via-slate-900 to-orange-950/80 border border-amber-500/40 shadow-lg cursor-pointer hover:border-amber-400 active:scale-95 transition flex flex-col justify-between gap-2"
+          >
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <span className="px-1.5 py-0.5 rounded bg-amber-500 text-slate-950 text-[8px] font-black uppercase">
+                A4 VIP
+              </span>
+            </div>
+            <div>
+              <h3 className="text-xs font-extrabold text-white leading-tight">
+                Act ID / Card A4
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                Față + Verso pe 1 foaie
+              </p>
+            </div>
+          </div>
+
+          {/* 3. Mod Carte / Caiet (Despicare 2 Pagini) */}
+          <div
+            onClick={() => bookInputRef.current?.click()}
+            className="p-3 rounded-2xl bg-gradient-to-br from-emerald-950/80 via-slate-900 to-teal-950/80 border border-emerald-500/40 shadow-lg cursor-pointer hover:border-emerald-400 active:scale-95 transition flex flex-col justify-between gap-2"
+          >
+            <input
+              type="file"
+              ref={bookInputRef}
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) onNewBookScan(e.target.files[0]);
+              }}
+            />
+            <div className="flex items-center justify-between">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 text-[8px] font-black uppercase">
+                2 PAG
+              </span>
+            </div>
+            <div>
+              <h3 className="text-xs font-extrabold text-white leading-tight">
+                Scanare Carte
+              </h3>
+              <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+                Separă automat 2 pagini
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -199,7 +390,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             <p className="text-xs text-slate-400 mb-5">
               {searchQuery
                 ? 'Încearcă alt termen de căutare.'
-                : 'Apasă butonul verde de mai jos pentru a scana prima foaie sau deschide studiul de semnături.'}
+                : 'Apasă pe „Scanează” pentru detecție automată AI a colțurilor și albire Magic Color Pro.'}
             </p>
             <div className="flex gap-2">
               <button
@@ -210,97 +401,120 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span>Scanează Document</span>
               </button>
               <button
-                onClick={onOpenSignatureStudio}
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-xl shadow-blue-500/25 active:scale-95 transition flex items-center gap-1.5"
+                onClick={() => setShowIdCardModal(true)}
+                className="px-4 py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs active:scale-95 transition flex items-center gap-1.5"
               >
-                <PenTool className="w-4 h-4" />
-                <span>Semnături</span>
+                <CreditCard className="w-4 h-4" />
+                <span>Act ID A4</span>
               </button>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 pt-1">
-            {filtered.map((doc) => (
-              <div
-                key={doc.id}
-                onClick={() => onOpenDocument(doc.id)}
-                className="group relative bg-slate-900 border border-slate-800/90 rounded-2xl overflow-hidden shadow-lg hover:border-emerald-500/50 transition cursor-pointer flex flex-col"
-              >
-                {/* Thumbnail */}
-                <div className="relative aspect-[3/4] bg-slate-950 flex items-center justify-center overflow-hidden">
-                  {doc.thumbnail ? (
-                    <img
-                      src={doc.thumbnail}
-                      alt={doc.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    />
-                  ) : (
-                    <FileText className="w-12 h-12 text-slate-700" />
+            {filtered.map((doc) => {
+              const isSelectedMerge = selectedForMerge.includes(doc.id);
+              return (
+                <div
+                  key={doc.id}
+                  onClick={() => {
+                    if (isMergeMode) {
+                      toggleMergeSelect(doc.id);
+                    } else {
+                      onOpenDocument(doc.id);
+                    }
+                  }}
+                  className={`group relative bg-slate-900 border rounded-2xl overflow-hidden shadow-lg transition cursor-pointer flex flex-col ${
+                    isSelectedMerge
+                      ? 'border-purple-400 ring-2 ring-purple-500/40'
+                      : 'border-slate-800/90 hover:border-emerald-500/50'
+                  }`}
+                >
+                  {/* Thumbnail */}
+                  <div className="relative aspect-[3/4] bg-slate-950 flex items-center justify-center overflow-hidden">
+                    {doc.thumbnail ? (
+                      <img
+                        src={doc.thumbnail}
+                        alt={doc.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      />
+                    ) : (
+                      <FileText className="w-12 h-12 text-slate-700" />
+                    )}
+
+                    {/* Page Count Badge */}
+                    <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-[11px] font-bold text-white border border-white/10 flex items-center gap-1 shadow-md">
+                      <Layers className="w-3 h-3 text-emerald-400" />
+                      <span>{doc.pageCount}</span>
+                    </span>
+
+                    {/* Merge Checkbox or 3-Dots Menu */}
+                    {isMergeMode ? (
+                      <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-purple-950/90 text-purple-300 border border-purple-400/50">
+                        {isSelectedMerge ? (
+                          <CheckSquare className="w-4 h-4 text-purple-400" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuDocId(activeMenuDocId === doc.id ? null : doc.id);
+                        }}
+                        className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition shadow-md"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Dropdown Menu */}
+                  {activeMenuDocId === doc.id && !isMergeMode && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute top-10 right-2 z-30 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl py-1 w-36 animate-in fade-in duration-150"
+                    >
+                      <button
+                        onClick={(e) => handleRename(doc, e)}
+                        className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800 flex items-center gap-2"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Redenumește</span>
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(doc.id, e)}
+                        className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-slate-800 flex items-center gap-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Șterge</span>
+                      </button>
+                    </div>
                   )}
 
-                  {/* Page Count Badge */}
-                  <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg bg-black/75 backdrop-blur-md text-[11px] font-bold text-white border border-white/10 flex items-center gap-1 shadow-md">
-                    <Layers className="w-3 h-3 text-emerald-400" />
-                    <span>{doc.pageCount}</span>
-                  </span>
-
-                  {/* Quick 3-Dots Menu Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveMenuDocId(activeMenuDocId === doc.id ? null : doc.id);
-                    }}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/60 hover:bg-black/90 text-white backdrop-blur-md transition shadow-md"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Dropdown Menu */}
-                {activeMenuDocId === doc.id && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute top-10 right-2 z-30 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl py-1 w-36 animate-in fade-in duration-150"
-                  >
-                    <button
-                      onClick={(e) => handleRename(doc, e)}
-                      className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Redenumește</span>
-                    </button>
-                    <button
-                      onClick={(e) => handleDelete(doc.id, e)}
-                      className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-slate-800 flex items-center gap-2"
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Șterge</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Document Info */}
-                <div className="p-3 bg-slate-900 flex-1 flex flex-col justify-between">
-                  <h3 className="text-xs font-bold text-white truncate mb-1" title={doc.title}>
-                    {doc.title}
-                  </h3>
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-slate-500" />
-                      {new Date(doc.updatedAt).toLocaleDateString('ro-RO')}
-                    </span>
-                    <span className="uppercase text-[9px] font-semibold text-emerald-400/90 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                      {doc.category}
-                    </span>
+                  {/* Document Info */}
+                  <div className="p-3 bg-slate-900 flex-1 flex flex-col justify-between">
+                    <h3 className="text-xs font-bold text-white truncate mb-1" title={doc.title}>
+                      {doc.title}
+                    </h3>
+                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-slate-500" />
+                        {new Date(doc.updatedAt).toLocaleDateString('ro-RO')}
+                      </span>
+                      <span className="uppercase text-[9px] font-semibold text-emerald-400/90 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                        {doc.category}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Modern Bottom Dock with Dual Actions */}
+      {/* Modern Bottom Dock */}
       <div className="fixed bottom-0 inset-x-0 bg-slate-900/95 border-t border-slate-800/90 backdrop-blur-xl px-4 py-3 z-30 flex items-center justify-between gap-2 max-w-lg mx-auto sm:rounded-t-2xl">
         {/* Left: Gallery Import */}
         <input
@@ -341,6 +555,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <span className="text-[10px] font-bold text-blue-300">Semnături</span>
         </button>
       </div>
+
+      {/* ID Card Front/Back A4 Scanner Modal */}
+      {showIdCardModal && (
+        <IdCardScannerModal
+          onClose={() => setShowIdCardModal(false)}
+          onSaveIdDocument={async (title, compositeDataUrl, thumbnailUrl) => {
+            const newDoc = await createDocument(title, 'acte');
+            await addPageToDocument(newDoc.id, {
+              originalImage: compositeDataUrl,
+              processedImage: compositeDataUrl,
+              thumbnail: thumbnailUrl,
+              width: 1240,
+              height: 1754,
+              filter: 'magic',
+              brightness: 0,
+              contrast: 0,
+              rotation: 0
+            });
+            await onRefresh();
+            onOpenDocument(newDoc.id);
+          }}
+        />
+      )}
     </div>
   );
 };

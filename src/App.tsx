@@ -10,7 +10,10 @@ import {
 import {
   loadImage,
   detectDocumentCornersSync,
-  warpPerspective
+  warpPerspective,
+  applyFilter,
+  rotateCanvas,
+  createThumbnail
 } from './utils/imageProcessing';
 import { HomeView } from './components/HomeView';
 import { CameraView } from './components/CameraView';
@@ -77,6 +80,76 @@ export const App: React.FC = () => {
     },
     []
   );
+
+  /**
+   * Book Mode (2-Page Spread Auto-Splitter):
+   * Detects the open book spread, warps perspective, splits along the center spine
+   * into Left Page + Right Page, applies Magic Color Pro, and saves both pages!
+   */
+  const handleNewBookScan = async (file: File) => {
+    setIsAutoProcessing(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+      });
+
+      const img = await loadImage(dataUrl);
+      const detected = detectDocumentCornersSync(img, img.width, img.height);
+      let warped = warpPerspective(img, detected.corners);
+
+      // Ensure landscape orientation so spine is vertical in the middle
+      if (warped.height > warped.width) {
+        warped = rotateCanvas(warped, 90);
+      }
+
+      const halfW = Math.floor(warped.width / 2);
+      const fullH = warped.height;
+
+      const leftCanvas = document.createElement('canvas');
+      leftCanvas.width = halfW;
+      leftCanvas.height = fullH;
+      leftCanvas.getContext('2d')!.drawImage(warped, 0, 0, halfW, fullH, 0, 0, halfW, fullH);
+
+      const rightCanvas = document.createElement('canvas');
+      rightCanvas.width = halfW;
+      rightCanvas.height = fullH;
+      rightCanvas
+        .getContext('2d')!
+        .drawImage(warped, halfW, 0, halfW, fullH, 0, 0, halfW, fullH);
+
+      const dateStr = new Date().toLocaleDateString('ro-RO');
+      const newDoc = await createDocument(`Carte Scanată (${dateStr})`, 'notite');
+
+      for (const pageCanvas of [leftCanvas, rightCanvas]) {
+        const rawPageUrl = pageCanvas.toDataURL('image/jpeg', 0.92);
+        const enhanced = applyFilter(pageCanvas, 'magic', 0, 0);
+        const procUrl = enhanced.toDataURL('image/jpeg', 0.92);
+        const thumbUrl = createThumbnail(enhanced, 320);
+
+        await addPageToDocument(newDoc.id, {
+          originalImage: rawPageUrl,
+          processedImage: procUrl,
+          thumbnail: thumbUrl,
+          width: enhanced.width,
+          height: enhanced.height,
+          filter: 'magic',
+          brightness: 0,
+          contrast: 0,
+          rotation: 0
+        });
+      }
+
+      await refreshDocuments();
+      setTargetDocId(newDoc.id);
+      setActiveView('detail');
+    } catch (e) {
+      console.error('Book scan error:', e);
+    } finally {
+      setIsAutoProcessing(false);
+    }
+  };
 
   // Start new scan from Home
   const handleStartNewScanCamera = () => {
@@ -174,7 +247,6 @@ export const App: React.FC = () => {
 
     await refreshDocuments();
 
-    // Handle next step: batch queue or user chose "Scanează Următoarea"
     if (batchQueue.length > 0) {
       const nextImg = batchQueue[0];
       setBatchQueue((prev) => prev.slice(1));
@@ -221,6 +293,7 @@ export const App: React.FC = () => {
           }}
           onNewScanCamera={handleStartNewScanCamera}
           onNewScanGallery={(files) => handleStartGalleryImport(files)}
+          onNewBookScan={handleNewBookScan}
           onOpenSignatureStudio={() => setActiveView('studio')}
           onRefresh={refreshDocuments}
         />

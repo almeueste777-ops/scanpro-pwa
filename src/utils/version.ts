@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v2.0.0';
-export const APP_BUILD_NAME = 'Auto-Scan AI & Magic Color Pro';
+export const APP_VERSION = 'v2.1.0';
+export const APP_BUILD_NAME = 'VIP Suite: ID Card A4, Carte 2-Pag, Radieră Smart & Filigran PDF';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload
