@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Copy, Check, Download, Sparkles, Globe } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Copy, Check, Download, Sparkles, Globe, Volume2, Square } from 'lucide-react';
 import { recognizeTextFromImage } from '../utils/ocr';
 
 interface OcrModalProps {
@@ -21,6 +21,16 @@ export const OcrModal: React.FC<OcrModalProps> = ({
   const [progress, setProgress] = useState<number>(0);
   const [statusText, setStatusText] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+
+  // Stop speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   const runOcr = async () => {
     try {
@@ -43,6 +53,25 @@ export const OcrModal: React.FC<OcrModalProps> = ({
     }
   };
 
+  const toggleSpeak = () => {
+    if (!('speechSynthesis' in window) || !text.trim()) return;
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = language === 'eng' ? 'en-US' : 'ro-RO';
+    utterance.rate = 1.0;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -61,7 +90,7 @@ export const OcrModal: React.FC<OcrModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 select-none">
       <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
@@ -70,8 +99,8 @@ export const OcrModal: React.FC<OcrModalProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Extragere Text (OCR Pro)</h3>
-              <p className="text-xs text-slate-400">Recunoaștere automată fără conexiune la internet</p>
+              <h3 className="text-base font-bold text-white">Extragere Text & Cititor Vocal</h3>
+              <p className="text-xs text-slate-400">Recunoaștere OCR + Citire cu voce tare</p>
             </div>
           </div>
           <button
@@ -135,11 +164,33 @@ export const OcrModal: React.FC<OcrModalProps> = ({
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Text extras ({text.length} caractere)
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  {/* Text-to-Speech Button */}
+                  <button
+                    onClick={toggleSpeak}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition ${
+                      isSpeaking
+                        ? 'bg-rose-500/20 border-rose-500 text-rose-300 animate-pulse'
+                        : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                    }`}
+                  >
+                    {isSpeaking ? (
+                      <>
+                        <Square className="w-3 h-3 fill-current" />
+                        <span>Oprește Vocea</span>
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="w-3.5 h-3.5" />
+                        <span>Citește cu Voce</span>
+                      </>
+                    )}
+                  </button>
+
                   <button
                     onClick={runOcr}
                     disabled={isRunning}
-                    className="text-xs text-purple-400 hover:underline"
+                    className="text-xs text-purple-400 hover:underline font-semibold"
                   >
                     Re-scanează
                   </button>
@@ -147,7 +198,10 @@ export const OcrModal: React.FC<OcrModalProps> = ({
               </div>
               <textarea
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  if (onSaveText) onSaveText(e.target.value);
+                }}
                 rows={8}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-200 focus:outline-none focus:border-purple-500 font-sans leading-relaxed"
                 placeholder="Textul extras va apărea aici..."

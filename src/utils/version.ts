@@ -1,5 +1,5 @@
-export const APP_VERSION = 'v2.2.0';
-export const APP_BUILD_NAME = 'Audit & Fix Complet: VIP Suite + Semnături 1:1';
+export const APP_VERSION = 'v3.0.0';
+export const APP_BUILD_NAME = 'Original AI Edition: IBAN/CUI Extractor, Colaj A4, Seif PIN & Cititor Vocal';
 
 /**
  * Force clear Service Worker and Cache Storage, then hard-reload

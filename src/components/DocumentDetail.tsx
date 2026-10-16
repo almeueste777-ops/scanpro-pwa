@@ -14,12 +14,15 @@ import {
   Maximize2,
   PenTool,
   Eraser,
-  Wand2
+  Wand2,
+  Cpu,
+  LayoutGrid
 } from 'lucide-react';
 import {
   db,
   deletePage,
   deleteDocument,
+  addPageToDocument,
   type DocumentItem,
   type DocumentPage,
   type FilterType,
@@ -36,6 +39,8 @@ import { PdfExportModal } from './PdfExportModal';
 import { OcrModal } from './OcrModal';
 import { SignDocumentView } from './SignDocumentView';
 import { PageRetouchModal } from './PageRetouchModal';
+import { SmartDataModal } from './SmartDataModal';
+import { CollageModal } from './CollageModal';
 
 interface DocumentDetailProps {
   documentId: string;
@@ -61,6 +66,8 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleInput, setTitleInput] = useState('');
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showSmartDataModal, setShowSmartDataModal] = useState(false);
+  const [showCollageModal, setShowCollageModal] = useState(false);
   const [ocrTargetPage, setOcrTargetPage] = useState<DocumentPage | null>(null);
   const [retouchTargetPage, setRetouchTargetPage] = useState<DocumentPage | null>(null);
   const [fullPreviewPage, setFullPreviewPage] = useState<DocumentPage | null>(null);
@@ -258,20 +265,31 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Sign & Stamp Document */}
+            {/* Smart Data Extractor (IBAN, CUI, Total, CNP) */}
             <button
-              onClick={() => setSignViewPageIndex(0)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-300 border border-slate-700 rounded-xl font-bold text-xs active:scale-95 transition"
-              title="Semnează și ștampilează documentul"
+              onClick={() => setShowSmartDataModal(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-purple-950/90 hover:bg-purple-900 text-purple-300 border border-purple-500/40 rounded-xl font-bold text-xs active:scale-95 transition"
+              title="Extractor AI Date: IBAN, CUI, Total Factură, CNP, CSV/vCard"
             >
-              <PenTool className="w-3.5 h-3.5 text-blue-400" />
-              <span>Semnează</span>
+              <Cpu className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Date & IBAN</span>
+              <span className="sm:hidden">IBAN/AI</span>
+            </button>
+
+            {/* Collage A4 Button */}
+            <button
+              onClick={() => setShowCollageModal(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-500/40 rounded-xl font-bold text-xs active:scale-95 transition"
+              title="Colaj A4 (pune 2, 4 sau 6 bonuri/pagini pe o singură foaie A4)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
+              <span>Colaj A4</span>
             </button>
 
             {/* Export PDF Button */}
             <button
               onClick={() => setShowExportModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-xl font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 rounded-xl font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition"
             >
               <Share2 className="w-4 h-4 stroke-[2.5]" />
               <span>PDF</span>
@@ -601,6 +619,36 @@ export const DocumentDetail: React.FC<DocumentDetailProps> = ({
             await loadData();
           }}
           onClose={() => setRetouchTargetPage(null)}
+        />
+      )}
+
+      {showSmartDataModal && (
+        <SmartDataModal
+          document={doc}
+          pages={pages}
+          onPagesUpdated={loadData}
+          onClose={() => setShowSmartDataModal(false)}
+        />
+      )}
+
+      {showCollageModal && (
+        <CollageModal
+          pages={pages}
+          onSaveCollagePage={async (collageDataUrl, thumbnailUrl) => {
+            await addPageToDocument(documentId, {
+              originalImage: collageDataUrl,
+              processedImage: collageDataUrl,
+              thumbnail: thumbnailUrl,
+              width: 1240,
+              height: 1754,
+              filter: 'magic',
+              brightness: 0,
+              contrast: 0,
+              rotation: 0
+            });
+            await loadData();
+          }}
+          onClose={() => setShowCollageModal(false)}
         />
       )}
 

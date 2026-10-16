@@ -16,7 +16,10 @@ import {
   GitMerge,
   CheckSquare,
   Square,
-  X
+  X,
+  Lock,
+  Unlock,
+  Shield
 } from 'lucide-react';
 import {
   deleteDocument,
@@ -27,6 +30,7 @@ import {
 } from '../db';
 import { PwaInstallPrompt } from './PwaInstallPrompt';
 import { IdCardScannerModal } from './IdCardScannerModal';
+import { VaultBackupModal, VAULT_PIN_STORAGE_KEY } from './VaultBackupModal';
 import { APP_VERSION, forceAppUpdate } from '../utils/version';
 
 interface HomeViewProps {
@@ -53,6 +57,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const [activeMenuDocId, setActiveMenuDocId] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showIdCardModal, setShowIdCardModal] = useState(false);
+  const [showVaultModal, setShowVaultModal] = useState(false);
 
   // Merge Documents state
   const [isMergeMode, setIsMergeMode] = useState(false);
@@ -109,6 +114,44 @@ export const HomeView: React.FC<HomeViewProps> = ({
       setActiveMenuDocId(null);
       onRefresh();
     }
+  };
+
+  // Lock / Unlock document with 4-digit PIN
+  const handleToggleLock = async (doc: DocumentItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const savedPin = localStorage.getItem(VAULT_PIN_STORAGE_KEY);
+    if (!savedPin) {
+      setActiveMenuDocId(null);
+      setShowVaultModal(true);
+      return;
+    }
+
+    if (doc.isLocked) {
+      const entered = prompt('Introdu codul PIN (4 cifre) pentru a debloca documentul:');
+      if (entered !== savedPin) {
+        if (entered !== null) alert('Cod PIN incorect!');
+        return;
+      }
+      await db.documents.update(doc.id, { isLocked: false, updatedAt: Date.now() });
+    } else {
+      await db.documents.update(doc.id, { isLocked: true, updatedAt: Date.now() });
+    }
+    setActiveMenuDocId(null);
+    onRefresh();
+  };
+
+  const handleOpenDocWithPinCheck = (doc: DocumentItem) => {
+    if (doc.isLocked) {
+      const savedPin = localStorage.getItem(VAULT_PIN_STORAGE_KEY);
+      if (savedPin) {
+        const entered = prompt(`Documentul „${doc.title}” este protejat. Introdu PIN-ul (4 cifre):`);
+        if (entered !== savedPin) {
+          if (entered !== null) alert('Cod PIN incorect!');
+          return;
+        }
+      }
+    }
+    onOpenDocument(doc.id);
   };
 
   const handleForceUpdate = async () => {
@@ -192,6 +235,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Seif PIN & Backup Button */}
+            <button
+              onClick={() => setShowVaultModal(true)}
+              className="flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-800 text-emerald-300 border border-emerald-500/30 transition active:scale-95"
+              title="Seif PIN 4 Cifre & Backup / Restaurare Completă"
+            >
+              <Shield className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Seif & Backup</span>
+            </button>
+
             {/* Merge Documents Toggle */}
             {documents.length >= 2 && (
               <button
@@ -219,7 +272,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               title="Apasă pentru a goli cache-ul și reîncărca cea mai recentă versiune"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isUpdating ? 'animate-spin' : ''}`} />
-              <span>{isUpdating ? 'Se curăță...' : 'Actualizează'}</span>
+              <span className="hidden sm:inline">{isUpdating ? 'Se curăță...' : 'Actualizează'}</span>
             </button>
           </div>
         </div>
@@ -420,13 +473,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
                     if (isMergeMode) {
                       toggleMergeSelect(doc.id);
                     } else {
-                      onOpenDocument(doc.id);
+                      handleOpenDocWithPinCheck(doc);
                     }
                   }}
                   className={`group relative bg-slate-900 border rounded-2xl overflow-hidden shadow-lg transition cursor-pointer flex flex-col ${
                     isSelectedMerge
                       ? 'border-purple-400 ring-2 ring-purple-500/40'
-                      : 'border-slate-800/90 hover:border-emerald-500/50'
+                      : doc.isLocked
+                        ? 'border-amber-500/50 hover:border-amber-400'
+                        : 'border-slate-800/90 hover:border-emerald-500/50'
                   }`}
                 >
                   {/* Thumbnail */}
@@ -435,10 +490,24 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <img
                         src={doc.thumbnail}
                         alt={doc.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        className={`w-full h-full object-cover transition duration-300 ${
+                          doc.isLocked ? 'blur-lg scale-110 opacity-40' : 'group-hover:scale-105'
+                        }`}
                       />
                     ) : (
                       <FileText className="w-12 h-12 text-slate-700" />
+                    )}
+
+                    {/* Locked PIN Overlay */}
+                    {doc.isLocked && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/50 backdrop-blur-sm">
+                        <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 mb-1.5 shadow-lg">
+                          <Lock className="w-5 h-5" />
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 bg-black/60 px-2 py-0.5 rounded-md border border-amber-500/30">
+                          Protejat PIN
+                        </span>
+                      </div>
                     )}
 
                     {/* Page Count Badge */}
@@ -473,8 +542,24 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   {activeMenuDocId === doc.id && !isMergeMode && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute top-10 right-2 z-30 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl py-1 w-36 animate-in fade-in duration-150"
+                      className="absolute top-10 right-2 z-30 bg-slate-900 border border-slate-700/90 rounded-xl shadow-2xl py-1 w-40 animate-in fade-in duration-150"
                     >
+                      <button
+                        onClick={(e) => handleToggleLock(doc, e)}
+                        className="w-full px-3 py-2 text-left text-xs text-amber-300 hover:bg-slate-800 flex items-center gap-2 font-semibold"
+                      >
+                        {doc.isLocked ? (
+                          <>
+                            <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Deblochează PIN</span>
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Blochează cu PIN</span>
+                          </>
+                        )}
+                      </button>
                       <button
                         onClick={(e) => handleRename(doc, e)}
                         className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800 flex items-center gap-2"
@@ -494,8 +579,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
                   {/* Document Info */}
                   <div className="p-3 bg-slate-900 flex-1 flex flex-col justify-between">
-                    <h3 className="text-xs font-bold text-white truncate mb-1" title={doc.title}>
-                      {doc.title}
+                    <h3 className="text-xs font-bold text-white truncate mb-1 flex items-center gap-1" title={doc.title}>
+                      {doc.isLocked && <Lock className="w-3 h-3 text-amber-400 flex-shrink-0" />}
+                      <span className="truncate">{doc.title}</span>
                     </h3>
                     <div className="flex items-center justify-between text-[10px] text-slate-400">
                       <span className="flex items-center gap-1">
@@ -576,6 +662,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
             await onRefresh();
             onOpenDocument(newDoc.id);
           }}
+        />
+      )}
+
+      {/* Vault PIN & Full Backup Modal */}
+      {showVaultModal && (
+        <VaultBackupModal
+          onClose={() => setShowVaultModal(false)}
+          onDataRestored={onRefresh}
         />
       )}
     </div>

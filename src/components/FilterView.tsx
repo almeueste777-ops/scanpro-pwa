@@ -77,6 +77,7 @@ export const FilterView: React.FC<FilterViewProps> = ({
   const [contrast, setContrast] = useState<number>(0);
   const [rotation, setRotation] = useState<number>(0);
   const [showSliders, setShowSliders] = useState<boolean>(false);
+  const [comparingOriginal, setComparingOriginal] = useState<boolean>(false);
 
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const processedCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -96,10 +97,11 @@ export const FilterView: React.FC<FilterViewProps> = ({
     const ctx = displayCanvas.getContext('2d');
     if (!ctx) return;
 
-    displayCanvas.width = filtered.width;
-    displayCanvas.height = filtered.height;
-    ctx.drawImage(filtered, 0, 0);
-  }, [warpedCanvas, currentFilter, brightness, contrast, rotation]);
+    const toShow = comparingOriginal ? rotated : filtered;
+    displayCanvas.width = toShow.width;
+    displayCanvas.height = toShow.height;
+    ctx.drawImage(toShow, 0, 0);
+  }, [warpedCanvas, currentFilter, brightness, contrast, rotation, comparingOriginal]);
 
   useEffect(() => {
     updatePreview();
@@ -179,6 +181,25 @@ export const FilterView: React.FC<FilterViewProps> = ({
             ref={previewCanvasRef}
             className="max-w-full max-h-[62vh] object-contain block mx-auto rounded-lg"
           />
+
+          {/* Before / After Hold-to-Compare Pill */}
+          {currentFilter !== 'original' && (
+            <button
+              onMouseDown={() => setComparingOriginal(true)}
+              onMouseUp={() => setComparingOriginal(false)}
+              onMouseLeave={() => setComparingOriginal(false)}
+              onTouchStart={() => setComparingOriginal(true)}
+              onTouchEnd={() => setComparingOriginal(false)}
+              className={`absolute bottom-3 right-3 px-3 py-1.5 rounded-full text-[11px] font-bold backdrop-blur-md border shadow-lg flex items-center gap-1.5 transition ${
+                comparingOriginal
+                  ? 'bg-amber-500 text-slate-950 border-amber-300'
+                  : 'bg-black/75 text-white border-white/20 hover:bg-black/90'
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>{comparingOriginal ? 'POZA BRUTĂ (ÎNAINTE)' : 'Ține apăsat: Înainte/După'}</span>
+            </button>
+          )}
         </div>
 
         {/* Floating Fine-Tuning Sliders Overlay */}

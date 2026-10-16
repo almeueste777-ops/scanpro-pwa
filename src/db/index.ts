@@ -40,6 +40,7 @@ export interface DocumentItem {
   updatedAt: number;
   pageCount: number;
   thumbnail: string;
+  isLocked?: boolean;
 }
 
 export interface SignatureItem {
